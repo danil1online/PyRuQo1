@@ -6,3 +6,4 @@ trl
 datasets 
 accelerate 
 TQDM
+pymupdf
