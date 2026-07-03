@@ -4,8 +4,8 @@ from peft import PeftModel
 import gc
 
 BASE_MODEL_NAME = "ai-sage/GigaChat-20B-A3B-instruct-v1.5-bf16"
-LORA_ADAPTER_DIR = "./o1_gigachat_university_lora"
-OUTPUT_DIR = "./merged_o1_gigachat_university"
+LORA_ADAPTER_DIR = "../o1_gigachat_university_lora"
+OUTPUT_DIR = "../merged_o1_gigachat_university"
 
 print("--> Запуск оптимизированного слияния для ПК с 64 ГБ RAM...")
 
