@@ -2,6 +2,7 @@ import json
 import os
 import re
 from tqdm import tqdm
+from pdf_parser import get_all_university_chunks
 
 # Представим, что у вас есть функция, которая вытягивает чистый текст из PDF/DOCX
 def get_article_chunks(directory_path, chunk_size=3500):
@@ -38,12 +39,13 @@ def REST_PROMPT_TEMPLATE(context):
 """
 
 def generate_synthetic_data():
-    # 1. Сбор сырых данных
-    chunks = get_article_chunks("./university_papers")
+    # Вместо get_article_chunks используем реальный обход папки с PDF
+    PDF_FOLDER = "/home/user/documents/university_papers" # Путь к вашему массиву PDF
+    chunks = get_all_university_chunks(PDF_FOLDER, chunk_size=3500, overlap=500)
     
     dataset_rows = []
     
-    print(f"--> Найдено {len(chunks)} фрагментов статей. Начинаем генерацию пар...")
+    print(f"--> Начинаем отправку {len(chunks)} чанков в o1_gigachat для генерации мыслей...")
     
     # 2. Цикл генерации (В продакшене здесь вызывается генерация через вашу LLM)
     for chunk in tqdm(chunks):
