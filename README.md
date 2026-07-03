@@ -203,6 +203,7 @@ python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../unive
  python3.10 -m venv env
  source env/bin/activate
  pip install -r requirements.txt
+ ```
  
  1.3. Подготовка данных и запуск сборки датасета
 
