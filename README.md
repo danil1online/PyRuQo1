@@ -1,87 +1,174 @@
 # o1_gigachat-20b-a3b_lora_npi
 
+Разработка основана на [Russian o1 / GigaChat 20B-A3B Instruct](https://huggingface.co/evilfreelancer/o1_gigachat-20b-a3b_lora), где обобщенно показано, как создан LoRA-адаптер для модели GigaChat-20B-A3B (и видимо для o1) на датасете, который, видимо, сейчас уже является [Dataset_of_Russian_thinking](https://huggingface.co/datasets/Egor-3926/Dataset_of_Russian_thinking). 
+
+Программа, повторяющая данное обучение предствалена в [репозитории](scripts/basic_example.py).
+
+Скрипт оптимизирован под жесткий лимит в 24 ГБ VRAM (RTX 3090): в нём активированы 4-битное квантование базы, сохранение контрольных точек градиентов (gradient_checkpointing) и страничный оптимизатор, который убережет карту от ошибки Out of Memory.
 
 
-## Getting started
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
-git branch -M main
-git push -uf origin main
+Порядок запуска:
+```bash
+git clone http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
+cd o1_gigachat-20b-a3b_lora_npi
+python3.10 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+python scripts/basic_example.py
 ```
 
-## Integrate with your tools
+Важные технические нюансы:
+- **Если падает с ошибкой Out of Memory**. Если в процессе обучения видеокарта всё же переполняется, уменьшите max_seq_length до 1024 в блоке SFTTrainer. Длина контекста сильнее всего влияет на потребление VRAM при обучении.
+- **Как адаптировать под университетские публикации**. Когда вы сформируете собственный датасет из статей (например, с помощью o1), структура вашего JSON файла должна соответствовать функции formatting_prompts_func. Можно загрузить свой локальный файл вместо Hugging Face одной строчкой:
 
-* [Set up project integrations](http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi/-/settings/integrations)
+```python
+dataset = load_dataset("json", data_files="your_university_dataset.json", split="train")
+```
 
-## Collaborate with your team
+Указанный [базовый скрипт](scripts/basic_example.py) сохранит только маленькие веса адаптера (~100-200 МБ). Чтобы использовать модель полноценно (например, конвертировать её в GGUF для инференса), потребуется запустить [скрипт слияния (Merge)](scripts/merge_lora_example.py) базовой модели GigaChat-20B и сохраненного адаптера. 
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+Cлияние (Merge) нужно делать строго до финального квантования в GGUF (если такое планируется). Инструменты конвертации (такие как llama.cpp) не умеют напрямую склеивать 4-битные квантованные файлы GGUF с отдельными LoRA-адаптерами.
 
-## Test and Deploy
+Процесс устроен так: 
+- базовая модель загружается в исходной точности (FP16/BF16), 
+- к модели применяется адаптер, 
+- веса суммируются, 
+- результат сохраняется как полноценная новая модель (FP16), 
+- полноценная новая модель затем квантуется в GGUF.
 
-Use the built-in continuous integration in GitLab.
+Поскольку базовая модель GigaChat-20B-A3B в формате FP16 весит около 40 ГБ, она не поместится целиком в видеокарту RTX 3090 (24 ГБ) во время слияния. Однако если есть **256 ГБ** системной RAM и мощный процессор, то следующий скрипт задействует оперативную память (CPU) для выполнения этой операции, вообще не перегружая видеокарту.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+```bash
+python scripts/merge_lora_example.py
+```
 
-***
+Предположим, такого ПК нет. Есть **64 ГБ** оперативной памяти. Это абсолютный технологический минимум, но его хватит для слияния модели GigaChat-20B-A3B (размер в FP16 составляет около 39–40 ГБ). Однако, если запустить процесс «в лоб», операционная система задействует файл подкачки (Swap), из-за чего слияние будет идти очень медленно или завершится аварийно (ошибкой Out of Memory в ОС). Чтобы слияние гарантированно прошло успешно на 64 ГБ ОЗУ, скрипт необходимо оптимизировать. **Главный секрет**: нельзя загружать модель в память одним куском. Hugging Face умеет читать и обрабатывать модель послойно прямо с диска. 
 
-# Editing this README
+**Оптимизированный скрипт** слияния для 64 ГБ RAM [merge_low_ram.py](scripts/merge_low_ram_example.py). 
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Этот вариант использует параметр low_cpu_mem_usage=True и пошаговую склейку слоев, снижая пиковое потребление ОЗУ до ~42–45 ГБ.
 
-## Suggestions for a good README
+Важные правила подготовки ПК перед запуском:
+- Закройте все приложения, браузеры (особенно Chrome), мессенджеры и среды разработки (IDE вроде PyCharm). Нужно освободить максимум из 64 ГБ.
+- Настройте файл подкачки (обязательно). Если используется Linux убедитесь, что размер Swap составляет не менее 30–40 ГБ (желательно на быстром NVMe SSD). Если Windows, зайдите в Параметры системы -> Быстродействие -> Виртуальная память и жестко задайте размер файла подкачки на диске C: (или там, где стоит SSD) в диапазоне от 32000 до 48000 МБ.
+- Запаситесь терпением. Из-за процессора i5-9400F и работы на грани лимита оперативной памяти процесс сохранения модели на диск может занять от 15 до 30 минут. Это нормально, главное — не прерывать скрипт. 
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Конвертация в GGUF
 
-## Name
-Choose a self-explaining name for your project.
+Как только скрипт отработает, у вас появится папка ./merged_o1_gigachat_university с файлами safetensors. Чтобы превратить её в один файл .gguf для запуска на CPU+GPU через llama.cpp или Ollama, выполните в терминале следующие шаги:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+1. Клонируйте официальный репозиторий llama.cpp и установите его зависимости:
+```bash
+https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+pip install -r requirements.txt
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+2. Сконвертируйте модель из формата Hugging Face в формат GGUF (изначально в максимальном качестве FP16):
+```bash
+python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../university_model_f16.gguf
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+3. Сквантуйте (сожмите) полученный файл до оптимального для вашей RTX 3090 размера (рекомендуется метод Q4_K_M, он весит около 13-14 ГБ и отлично встанет в 24 ГБ VRAM, сохранив интеллект модели):
+```bash
+./llama-quantize ../university_model_f16.gguf ../university_model_Q4_K_M.gguf Q4_K_M
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Финальный файл university_model_Q4_K_M.gguf будет полностью готов к работе.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Итоговые рекомендации и Минимальные технические требования
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Идеальная база -- Ubuntu 22.04. На этой ОС управлять памятью и автоматизировать процессы гораздо проще, чем на Windows.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Ниже пошаговое руководство, как подготовить систему, запустить скрипт слияния и затем конвертировать модель в GGUF, не вызывая критической ошибки Out of Memory (когда процесс убивается системой через OOM Killer).
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+1. Настройка SWAP (файла подкачки) на Ubuntu
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Если есть 64 ГБ RAM, а модели в пике сохранения потребуется чуть больше, создадим временный быстрый файл подкачки на 40 ГБ. Делать это нужно обязательно на SSD (NVMe) диске, так как HDD будет слишком медленным.
+```bash
+# 1. Отключаем текущий swap, если он активен
+sudo swapoff -a
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+# 2. Создаем файл подкачки размером 40 ГБ (count=40)
+sudo dd if=/dev/zero of=/swapfile bs=1G count=40 status=progress
+
+# 3. Устанавливаем правильные права доступа
+sudo chmod 600 /swapfile
+
+# 4. Форматируем файл под swap
+sudo mkswap /swapfile
+
+# 5. Включаем новый swap
+sudo swapon /swapfile
+
+# 6. Проверяем, что память добавилась (в строке Swap должно быть ~40Gi)
+free -h
+```
+
+2. Запуск оптимизированного скрипта слияния
+
+Перед запуском скрипта [merge_low_ram_example.py](scripts/merge_low_ram_example.py), крайне важно временно изменить параметр агрессивности использования подкачки (swappiness). По умолчанию Ubuntu пытается держать всё в RAM до последнего, а нам нужно, чтобы старые или неиспользуемые системные процессы уходили в swap заранее, освобождая физическую RAM под Python.
+
+```bash
+# Временно повышаем приоритет swap (сбросится после перезагрузки)
+sudo sysctl vm.swappiness=80
+
+# Запускаем скрипт слияния
+python merge_low_ram.py
+```
+Во время работы скрипта рекомендуется открыть второй терминал и выполнять команду htop или free -m, чтобы мониторить, как заполняется память.
+
+3. Конвертация в GGUF на Ubuntu 22.04
+
+Когда скрипт слияния завершится, появится папка ./merged_o1_gigachat_university. Процесс её сборки в GGUF на Ubuntu выглядит следующим образом:
+
+ 3.1. Подготовка компилятора и библиотек 
+
+ Для сборки утилит llama.cpp на Ubuntu вам понадобятся инструменты разработчика:
+ ```bash
+ sudo apt update
+ sudo apt install build-essential cmake git python3-pip -y
+ ```
+ 3.2. Клонирование и сборка llama.cpp
+ Собирать утилиты нужно сразу с поддержкой CUDA, чтобы этап квантования (сжатия) модели задействовал вашу видеокарту RTX 3090 — это ускорит процесс в десятки раз по сравнению с CPU.
+ ```bash
+ git clone https://github.com/ggml-org/llama.cpp.git
+ cd llama.cpp
+
+ # Сборка под CUDA (убедитесь, что у вас установлен CUDA Toolkit)
+ cmake -B build -DGGML_CUDA=ON
+ cmake --build build --config Release -j$(nproc)
+ ```
+ 
+ 3.3. Установка Python-зависимостей внутри llama.cpp
+
+ ```bash
+ pip3 install -r requirements.txt
+ ```
+
+ 3.4. Конвертация Hugging Face -> GGUF (в исходном качестве FP16)
+
+ ```bash
+ python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../university_model_f16.gguf
+ ```
+ Этот шаг создаст один массивный файл university_model_f16.gguf весом около 40 ГБ.
+
+ 3.5. Квантование (Сжатие модели) с помощью RTX 3090
+
+ Используем скомпилированную утилиту llama-quantize для сжатия модели в оптимальный формат Q4_K_M (4 бита с сохранением критически важных весов). Флаг CUDA автоматически подхватится исполняемым файлом.
+
+ ```bash
+ ./build/bin/llama-quantize ../university_model_f16.gguf ../university_model_Q4_K_M.gguf Q4_K_M
+ ```
+ На выходе должен появиться файл university_model_Q4_K_M.gguf размером около 13–14 ГБ.
+
+### По завершении:
+После того как вы полностью соберете финальный файл и проверите его работоспособность, следует вернуть настройки swap по умолчанию и удалить временный файл на 40 ГБ, чтобы он не занимал место на SSD:
+```bash
+sudo swapoff /swapfile
+sudo rm /swapfile
+```
 
 ## Authors and acknowledgment
 Show your appreciation to those who have contributed to the project.
