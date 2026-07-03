@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 import gc
 
-BASE_MODEL_NAME = "ai-sage/GigaChat-20B-A3B-instruct-v1.5"
+BASE_MODEL_NAME = "ai-sage/GigaChat-20B-A3B-instruct-v1.5-bf16"
 LORA_ADAPTER_DIR = "./o1_gigachat_university_lora"
 OUTPUT_DIR = "./merged_o1_gigachat_university"
 
@@ -18,7 +18,7 @@ base_model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_NAME,
     load_in_8bit=False,
     load_in_4bit=False,
-    torch_dtype=torch.float16,
+    torch_dtype=torch.bfloat16,
     device_map={"": "cpu"},
     low_cpu_mem_usage=True,       # КРИТИЧЕСКИ ВАЖНО: загружает модель послойно, а не целиком в RAM сразу
     trust_remote_code=True
