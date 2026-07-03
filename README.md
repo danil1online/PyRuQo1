@@ -292,6 +292,10 @@ python3 scripts/train_qlora.py
  ```bash
  ./build/bin/llama-quantize ../university_model_f16.gguf ../university_model_Q4_K_M.gguf Q4_K_M
  ```
+ или
+ ```bash
+ ./build/bin/llama-quantize ../university_model_bf16.gguf ../university_model_Q8_0.gguf Q8_0
+ ```
 
  Итог: В корневой директории появится готовый к локальному инференсу файл university_model_Q4_K_M.gguf размером около 13–14 ГБ.
 
