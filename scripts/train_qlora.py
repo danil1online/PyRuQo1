@@ -14,9 +14,7 @@ from trl import SFTTrainer
 # 1. КОНФИГУРАЦИЯ И ПУТИ
 # ==========================================
 # Базовая модель от Сбера (20 миллиардов параметров)
-MODEL_NAME = "ai-sage/GigaChat-20B-A3B-instruct-v1.5"
-# Датасет с цепочками рассуждений на русском языке
-DATASET_NAME = "Egor-3926/Dataset_of_Russian_thinking"
+MODEL_NAME = "ai-sage/GigaChat-20B-A3B-instruct-v1.5-bf16"
 # Папка для сохранения итогового LoRA-адаптера
 OUTPUT_DIR = "./o1_gigachat_university_lora"
 
@@ -51,7 +49,7 @@ def formatting_prompts_func(examples):
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",            # Высокоточный тип данных для квантования llm
-    bnb_4bit_compute_dtype=torch.float16, # Вычисления будут идти в FP16 (быстро на RTX 3090)
+    bnb_4bit_compute_dtype=torch.bfloat16, # Вычисления будут идти в BF16 (быстро на RTX 3090)
     bnb_4bit_use_double_quant=True        # Дополнительное квантование весов для экономии памяти
 )
 
@@ -102,7 +100,8 @@ training_args = TrainingArguments(
     optim="paged_adamw_32bit",         
     # Экономит до 30% видеопамяти, не пересчитывая все веса на проходе вперед
     gradient_checkpointing=True,       
-    fp16=True,                         # Обучение в полуточности
+    fp16=False,
+    bf16=True,                             # Обучение в полуточности
     max_grad_norm=0.3,
     warmup_ratio=0.03,
     lr_scheduler_type="constant",
