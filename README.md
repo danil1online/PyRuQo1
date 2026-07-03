@@ -210,7 +210,10 @@ python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../unive
  1.3.1. Создайте в корне каталога или укажите путь к папке с вашими PDF-документами (например, ./university_pdfs). Положите туда файлы научных публикаций за последние 10 лет.
  1.3.2. Запустите скрипт многопоточной генерации:
  ```bash
- python3 scripts/build_dataset_multi_server.py
+ # Запускаем скрипт в фоне. Логи будут писаться в файл dataset_gen.log
+ nohup python3 scripts/build_dataset_multi_server.py > dataset_gen.log 2>&1 &
+ # Посмотреть, как идет процесс в реальном времени:
+ tail -f dataset_gen.log
  ```
  Скрипт начнет обход папок, автоматически применит OCR к «слепым» сканам, нарежет тексты на чанки по 3500 символов и параллельно отправит запросы на сервера http://195.133.13.56:8079 и http://195.63.145.3:8078.
  1.3.3. На выходе в корне появится файл university_thinking_dataset.json, содержащий пары «Вопрос — Рассуждение <Thought> — Ответ».
@@ -220,7 +223,10 @@ python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../unive
 Этот этап выполняется строго на ПК с видеокартой RTX 3090 (24 ГБ VRAM).
 Скрипт автоматически скачает базовую модель GigaChat-20B-A3B-instruct-v1.5, сквантует её в 4 бита для экономии памяти видеокарты, подключит ваш созданный датасет и начнет тренировку.
 ```bash
-python3 scripts/train_qlora.py
+nohup python3 scripts/train_qlora.py > train.log 2>&1 &
+# Мониторинг обучения и температуры видеокарты в соседних вкладках:
+tail -f train.log
+watch -n 1 nvidia-smi
 ```
 После завершения обучения в каталоге проекта будет создана папка ./o1_gigachat_university_lora. В ней будут лежать обученные веса адаптера (матрицы низкого ранга) объемом около 100–200 МБ.
 
