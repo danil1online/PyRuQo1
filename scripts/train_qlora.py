@@ -31,11 +31,27 @@ data_files = {
     "train": "university_train.json",
     "validation": "university_val.json"
 }
-# Hugging Face автоматически сопоставит ключи со сплитами
+
 dataset = load_dataset("json", data_files=data_files)
+print(f"Загружен train: {len(dataset['train'])} строк, validation: {len(dataset['validation'])} строк.")
+
+# Новая функция форматирования, которая обрабатывает ОДИН конкретный пример (строку)
+def format_single_example(example):
+    return {
+        "text": (
+            f"Система: {example['system']}\n\n"
+            f"Пользователь: {example['prompt']}\n\n"
+            f"Система: {example['response']}"
+        )
+    }
+
+# Принудительно мапим датасет, создавая в нём ОДИН чистый столбец "text"
+# Это полностью отключает внутренние "угадайки" библиотеки TRL
+print("Принудительное форматирование колонок датасета...")
+dataset = dataset.map(format_single_example, remove_columns=dataset["train"].column_names)
+
 # Либо, если есть только один train-json:
 #dataset = load_dataset("json", data_files=DATASET_NAME, split="train")
-print(f"Загружен train: {len(dataset['train'])} строк, validation: {len(dataset['validation'])} строк.")
 
 # Функция форматирования данных для модели-рассуждалки.
 # Она упаковывает промпт и ответ в структуру с тегами <Thought> (Мысли).
@@ -124,7 +140,7 @@ training_args = SFTConfig(
     per_device_eval_batch_size=1,      # Размер батча для валидации
     do_eval=True,                      # Включить режим оценки
     max_seq_length=2048,
-    dataset_text_field=None,
+    dataset_text_field="text",
 )
 
 # ==========================================
@@ -136,7 +152,6 @@ trainer = SFTTrainer(
     train_dataset=dataset["train"],
     eval_dataset=dataset["validation"],
     peft_config=peft_config,
-    formatting_func=formatting_prompts_func,
     args=training_args, # Трейнер сам заберет длину контекста отсюда!
 )
 
