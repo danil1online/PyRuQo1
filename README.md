@@ -364,6 +364,43 @@ python3 scripts/test_gguf_math.py
 
 Идеальная база -- Ubuntu 22.04. На этой ОС управлять памятью и автоматизировать процессы гораздо проще, чем на Windows.
 
+### Использованные ПК
+
+1. Первый ПК -- для формирования датасета
+
+IP: 192.168.2.69
+
+Характеристики:
+- Ubuntu 22.04
+- 2 x Intel(R) Xeon(R) CPU E5-2697 v4 @ 2.30GHz
+- RAM DDR4 256 Gb
+- RTX 3050 VRAM 8 Gb
+- 2 x NVMe 1 Tb
+2. Второй ПК 
+* сначала для инференса условно "идеальной" модели Qwen3.5-4B-Q4_K_M.gguf в llama.cpp IP http://195.63.145.3:8181
+```sh
+ExecStart=/home/user/llama.cpp/build/bin/llama-server -m /home/user/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf -ngl 99 -c 65536 -b 8192 -ub 256 -t 4 --flash-attn on --timeout 600 --cache-type-k q4_0 --cache-type-v q4_0 --host 0.0.0.0 --port 8181
+``` 
+* затем на этапе обучения LoRA 
+
+Характеристики
+- Ubuntu 22.04
+- Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz
+- RAM DDR4 64 Gb
+- RTX 3090 VRAM 24 Gb
+- NVMe 2 Tb
+3. Третий ПК -- только для инференса условно "идеальной" модели Qwen3.5-4B-Q4_K_M.gguf в llama.cpp IP http://195.133.13.56:8079
+```sh
+ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/nextcloud/llama_cpp_models/Qwen3.5-4B-Q4_K_M.gguf --mmproj /home/user/nextcloud/llama_cpp_models/mmproj-F16.gguf -ngl 99 -c 98304 --host 0.0.0.0 --port 8079
+```
+Характеристики
+- Ubuntu 24.04
+- Intel(R) Core(TM) i7-2600K CPU @ 3.40GHz
+- RAM DDR3 32 Gb
+- GTX 1070 VRAM 8 Gb
+- HDD 2 Tb
+
+
 Ниже пошаговое руководство, как подготовить систему, запустить скрипт слияния и затем конвертировать модель в GGUF, не вызывая критической ошибки Out of Memory (когда процесс убивается системой через OOM Killer).
 
 1. Подготовка окружения и запуск генерации датасета
