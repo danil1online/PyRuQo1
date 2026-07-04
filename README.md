@@ -569,6 +569,7 @@ watch -n 1 nvidia-smi
  ```bash
  sudo swapoff /swapfile
  sudo rm /swapfile
+ sudo sysctl vm.swappiness=60
  ```
 
 5. Тестирование 
