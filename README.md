@@ -412,8 +412,8 @@ python3 scripts/test_gguf_math.py
 
  1.3.6. Запустите скрипт многопоточной генерации для статей инженерной и технической направленности:
  ```bash
- # Запускаем скрипт в фоне. Логи будут писаться в файл dataset_gen.log
- nohup python3 -u scripts/build_dataset_multi_server_math.py > dataset_gen.log 2>&1 &
+ # Запускаем скрипт в фоне. Логи будут писаться в файл dataset_math_gen.log
+ nohup python3 -u scripts/build_dataset_multi_server_math.py > dataset_math_gen.log 2>&1 &
  # Посмотреть, как идет процесс в реальном времени:
  tail -f dataset_gen.log
  ```
