@@ -85,37 +85,78 @@ def split_to_chunks(text, chunk_size=3500, overlap=500):
 # 3. ПОТОКОБЕЗОПАСНЫЙ ЗАПРОС К API
 # ==========================================
 def worker_query_api(context_chunk):
+    """
+    Адаптированная функция для нативных o1/Reasoning моделей (Qwen 35B).
+    Извлекает нативные мысли из reasoning_content и собирает идеальный датасет.
+    """
     server_url = available_servers.get()
     
+    # Системный промпт теперь простой и текстовый. Модели больше НЕ нужно генерировать JSON.
     system_prompt = (
         "Ты — ведущий научный методолог. Твоя задача — изучить фрагмент статьи, "
         "придумать сложный аналитический вопрос к нему, детально расписать логику "
         "рассуждения и выдать ответ. Ты должен вернуть результат СТРОГО в формате JSON "
         "со следующими ключами: 'prompt', 'thought', 'response'."
     )
-    user_prompt = f"Фрагмент научной публикации:\n\"\"\"\n{context_chunk}\n\"\"\""
+    
+    user_prompt = f"Фрагмент научной публикации с LaTeX-формулами:\n\"\"\"\n{context_chunk}\n\"\"\""
     
     payload = {
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.3,
-        "max_tokens": 1500,
-        "response_format": {"type": "json_object"}
+        "temperature": 0.2, # Низкая температура для строгости математики
+        "max_tokens": 2500  # Даем запас токенов на вывод формул
+        # "response_format" УБРАН НАВСЕГДА — он ломал reasoning-модель!
     }
     headers = {"Content-Type": "application/json"}
     
     try:
-        response = requests.post(server_url, headers=headers, json=payload, timeout=180)
+        # Ставим таймаут в 5 минут, так как 35B модель на сложных чанках может думать долго
+        response = requests.post(server_url, headers=headers, json=payload, timeout=300)
+        
         if response.status_code == 200:
-            content_str = response.json()["choices"]["message"]["content"]
-            return json.loads(content_str)
+            result_json = response.json()
+            choice = result_json["choices"][0]["message"]
+            
+            # 1. Извлекаем финальный текстовый ответ (там будут и задача, и решение)
+            full_response_text = choice.get("content", "").strip()
+            
+            # 2. ИЗВЛЕКАЕМ НАТИВНЫЕ МЫСЛИ МОДЕЛИ (Reasoning)
+            # Если llama.cpp отдает их в reasoning_content (как в curl)
+            thought_text = choice.get("reasoning_content", "").strip()
+            
+            # Страховка: если сервер отдал мысли в другом поле
+            if not thought_text:
+                thought_text = choice.get("data", {}).get("reasoning_content", "").strip()
+                
+            # Если модель сгенерировала глубокие мысли
+            if full_response_text and thought_text:
+                # Пакуем данные в формат вашего датасета
+                return {
+                    "prompt": f"На основе фрагмента статьи решите аналитическую задачу: {context_chunk[:150]}...",
+                    "thought": thought_text,
+                    "response": full_response_text
+                }
+            elif full_response_text:
+                # Если мыслей нет (вдруг отключились), пишем базовый лог рассуждения
+                return {
+                    "prompt": f"Решите математическую задачу на основе текста: {context_chunk[:150]}...",
+                    "thought": "Анализ предоставленного математического контекста и извлечение формул.",
+                    "response": full_response_text
+                }
+        else:
+            print(f"\n[Ошибка API] Сервер {server_url} вернул код {response.status_code}: {response.text}")
+            
     except Exception as e:
-        print(f"\n[Ошибка] Сервер {server_url} не ответил.")
+        print(f"\n[Сетевой сбой] Ошибка связи с сервером {server_url}: {e}")
     finally:
+        # В любом случае возвращаем сервер в пул свободных
         available_servers.put(server_url)
+        
     return None
+
 
 # ==========================================
 # 4. ДИСПЕТЧЕР И ЗАПУСК
