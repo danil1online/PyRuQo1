@@ -32,6 +32,8 @@ data_files = {
 }
 # Hugging Face автоматически сопоставит ключи со сплитами
 dataset = load_dataset("json", data_files=data_files)
+# Либо, если есть только один train-json:
+#dataset = load_dataset("json", data_files=DATASET_NAME, split="train")
 print(f"Загружен train: {len(dataset['train'])} строк, validation: {len(dataset['validation'])} строк.")
 
 # Функция форматирования данных для модели-рассуждалки.
