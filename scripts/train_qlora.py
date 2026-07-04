@@ -18,7 +18,7 @@ MODEL_NAME = "ai-sage/GigaChat-20B-A3B-instruct-v1.5-bf16"
 # Папка для сохранения итогового LoRA-адаптера
 OUTPUT_DIR = "./o1_gigachat_university_lora"
 # Путь к вашему сгенерированному локальному файлу
-DATASET_NAME = "university_thinking_dataset.json" 
+DATASET_NAME = "university_text_dataset.json" 
 
 print("--> Начинается процесс подготовки к обучению...")
 
