@@ -104,7 +104,7 @@ training_args = TrainingArguments(
     per_device_train_batch_size=1,     # Минимальный размер батча для экономии VRAM
     gradient_accumulation_steps=8,     # Накапливаем градиенты за 8 шагов (эффективный батч = 8)
     learning_rate=2e-4,                # Стандартный шаг обучения для LoRA
-    logging_steps=10,                  # Как часто выводить логи в консоль
+    logging_steps=2, #logging_steps=10,# Как часто выводить логи в консоль, 2 -- для 51 train, 6 val
     num_train_epochs=1,                # 1 эпохи обычно достаточно для адаптации стиля
     # Страничный оптимизатор: сбрасывает излишки памяти в RAM вашего ПК (в ваши 256 ГБ)
     optim="paged_adamw_32bit",         
@@ -115,11 +115,11 @@ training_args = TrainingArguments(
     max_grad_norm=0.3,
     warmup_ratio=0.03,
     lr_scheduler_type="constant",
-    save_strategy="steps",
-    save_steps=100,                    # Сохранять чекпоинт каждые 100 шагов
-    report_to="none",                  # Отключаем отправку логов в сторонние сервисы (wandb)
-    eval_strategy="steps",             # Считать метрики валидации по шагам
-    eval_steps=50,                     # Запускать валидацию каждые 50 шагов обучения
+    save_strategy="epoch", #save_strategy="steps", #epoch -- для 51 train, 6 val
+    #save_steps=100,                    # Сохранять чекпоинт каждые 100 шагов, заком. для 51 train, 6 val
+    report_to="none",                   # Отключаем отправку логов в сторонние сервисы (wandb)
+    eval_strategy="steps",              # Считать метрики валидации по шагам
+    eval_steps = 2, #eval_steps=50,     # Запускать валидацию каждые 50 шагов обучения, 2 -- для 51 train, 6 val
     per_device_eval_batch_size=1,      # Размер батча для валидации
     do_eval=True,                      # Включить режим оценки
     max_seq_length=2048,
