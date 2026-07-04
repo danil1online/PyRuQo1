@@ -389,7 +389,7 @@ ExecStart=/home/user/llama.cpp/build/bin/llama-server -m /home/user/.lmstudio/mo
 - RAM DDR4 64 Gb
 - RTX 3090 VRAM 24 Gb
 - NVMe 2 Tb
-3. Третий ПК -- только для инференса условно "идеальной" модели Qwen3.5-4B-Q4_K_M.gguf в llama.cpp IP http://195.133.13.56:8079
+3. Третий ПК -- только для инференса условно "идеальной" модели Qwen3.5-4B-Q4_K_M.gguf в llama.cpp IP http://192.168.2.52:8079
 ```sh
 ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/nextcloud/llama_cpp_models/Qwen3.5-4B-Q4_K_M.gguf --mmproj /home/user/nextcloud/llama_cpp_models/mmproj-F16.gguf -ngl 99 -c 98304 --host 0.0.0.0 --port 8079
 ```
@@ -441,7 +441,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  # Посмотреть, как идет процесс в реальном времени:
  tail -f dataset_gen.log
  ```
- Скрипт начнет обход папок, автоматически применит OCR к «слепым» сканам, нарежет тексты на чанки по 3500 символов и параллельно отправит запросы на сервера http://195.133.13.56:8079 и http://195.63.145.3:8078.
+ Скрипт начнет обход папок, автоматически применит OCR к «слепым» сканам, нарежет тексты на чанки по 3500 символов и параллельно отправит запросы на сервера http://192.168.2.52:8079 и http://195.63.145.3:8181.
 
  1.3.4. На выходе в корне появится файл university_thinking_dataset.json, содержащий пары «Вопрос — Рассуждение `<Thought>` — Ответ».
 
@@ -454,7 +454,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  # Посмотреть, как идет процесс в реальном времени:
  tail -f dataset_gen.log
  ```
- Скрипт начнет обход папок, автоматически применит OCR к «слепым» сканам, нарежет тексты на чанки по 3500 символов и параллельно отправит запросы на сервера http://195.133.13.56:8079 и http://195.63.145.3:8078.
+ Скрипт начнет обход папок, автоматически применит OCR к «слепым» сканам, нарежет тексты на чанки по 3500 символов и параллельно отправит запросы на сервера http://192.168.2.52:8079 и http://195.63.145.3:8181.
 
  1.3.7. На выходе в корне появится файл university_math_dataset.json, содержащий пары «Вопрос — Рассуждение `<Thought>` — Ответ».
 
@@ -462,6 +462,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  ```bash
  python3 scripts/mix_datasets_train_val.py
  ```
+ 1.3.9. При необходимости (как в [описанной конфигурации](README.md#использованные-пк)), скопируйте файлы `university_train.json` и `university_val.json` на ПК, где установлена RTX 3090, остановите на нем llama.cpp и остальные программы, которые могут потреблять VRAM и RAM, скачайте репозиторий и установите все необходимые библиотеки.    
 
 2. QLoRA-обучение модели (Fine-Tuning)
 
