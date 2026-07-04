@@ -3,7 +3,7 @@ import re
 import fitz  # PyMuPDF
 
 JOURNALS_FOLDER = "./raw_journals"
-OUTPUT_FOLDER = "./university_pdfs"
+OUTPUT_FOLDER = "./university_pdfs_journals"
 # Жесткий лимит страниц: если маркеры не сработали, режем по столько страниц
 FORCE_PAGES_PER_ARTICLE = 4 
 
