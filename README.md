@@ -209,7 +209,7 @@ tail -f dataset_math.log
 
 1. Пропускаем гуманитарные/простые статьи через парсер fitz и сгенерируйте первую часть JSON-файла.
 2. Пропустите физико-математические статьи через парсер Marker и генерируем вторую часть JSON-файла с LaTeX.
-3. Объединяем оба JSON-файла в один большой датасет перед запуском train_qlora.py. Для этого используем [микро-скрипт](scripts/mix_datasets.py). На выходе сформируется единый файл `university_thinking_dataset.json`, полностью готовый для передачи в train_qlora.py. Запуск этого скрипта:
+3. Объединяем оба JSON-файла в один большой датасет перед запуском train_qlora.py. Для этого используем [микро-скрипт](scripts/mix_datasets.py). На выходе сформируется единый файл `university_text_dataset.json`, полностью готовый для передачи в вариант train_qlora.py, [работающий без validation](scripts/train_qlora.py#L35). Запуск этого скрипта:
 ```bash
 python3 scripts/mix_datasets.py
 ```
@@ -465,7 +465,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 
  1.3.7. На выходе в корне появится файл university_math_dataset.json, содержащий пары «Вопрос — Рассуждение `<Thought>` — Ответ».
 
- ***Для 75 статей система сгенерировала `university_math_dataset.json` размером 119 Кб примерно за 45 минут.***
+ ***Для 75 статей система сгенерировала `university_math_dataset.json` размером 431 Кб примерно за 45 минут.***
 
  1.3.8. Запустите скрипт объединения датасетов с одновременным разделением итогового датасета на train и val
  ```bash
