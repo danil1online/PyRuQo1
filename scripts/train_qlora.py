@@ -9,6 +9,7 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
+from trl import SFTConfig  # Добавить эту строку в блок импортов
 
 # ==========================================
 # 1. КОНФИГУРАЦИЯ И ПУТИ
@@ -99,7 +100,7 @@ model.print_trainable_parameters() # Выведет процент обучае�
 # ==========================================
 # 5. ГИПЕРПАРАМЕТРЫ ТРЕНИРОВКИ (ОПТИМИЗАЦИЯ ПОД VRAM)
 # ==========================================
-training_args = TrainingArguments(
+training_args = SFTConfig(
     output_dir=OUTPUT_DIR,
     per_device_train_batch_size=1,     # Минимальный размер батча для экономии VRAM
     gradient_accumulation_steps=8,     # Накапливаем градиенты за 8 шагов (эффективный батч = 8)
@@ -123,6 +124,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=1,      # Размер батча для валидации
     do_eval=True,                      # Включить режим оценки
     max_seq_length=2048,
+    dataset_text_field=None,
 )
 
 # ==========================================
