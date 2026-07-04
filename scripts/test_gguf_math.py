@@ -1,42 +1,42 @@
 import os
 import sys
+import json
+import random
 from llama_cpp import Llama
 
 # ==========================================
 # 1. КОНФИГУРАЦИЯ ТЕСТА
 # ==========================================
-# Путь к вашему финальному квантованному файлу модели
 MODEL_PATH = "./university_model_Q4_K_M.gguf"
+VAL_DATASET_PATH = "./university_val.json" # Берем задачи отсюда!
+NUM_TEST_SAMPLES = 3                       # Сколько случайных задач взять на экзамен
 
 if not os.path.exists(MODEL_PATH):
-    print(f"[Ошибка] Финальный файл модели не найден по пути: {MODEL_PATH}")
-    print("Убедитесь, что вы завершили этапы слияния и квантования.")
+    print(f"[Ошибка] Файл модели не найден по пути: {MODEL_PATH}")
     sys.exit(1)
 
-print("--> Инициализация модели GigaChat-20B в llama.cpp...")
-print("Загрузка слоев в видеопамять RTX 3090 (CUDA)...")
-
-# Загружаем модель.
-# n_gpu_layers=-1 означает, что ВСЕ слои модели будут перенесены в VRAM вашей RTX 3090
-# n_ctx=2048 — задаем размер контекста для тестовых задач
-llm = Llama(
-    model_path=MODEL_PATH,
-    n_gpu_layers=-1, 
-    n_ctx=2048,
-    verbose=False # Отключаем избыточные системные логи библиотеки
-)
+print("--> Инициализация модели GigaChat-20B в llama.cpp на CUDA...")
+llm = Llama(model_path=MODEL_PATH, n_gpu_layers=-1, n_ctx=2048, verbose=False)
 
 # ==========================================
-# 2. ПОДГОТОВКА ТЕСТОВЫХ ЗАДАНИЙ (Экзамен)
+# 2. АВТОМАТИЧЕСКАЯ ЗАГРУЗКА ЗАДАНИЙ
 # ==========================================
-# Сюда вы можете вписать реальные сложные уравнения из отложенных статей вашего университета
-TEST_PROMPTS = [
-    # Тест 1: Запрос на вывод формулы (Проверка теоретической физики/механики)
-    "Выведи уравнение изменения предела прочности композитного сплава алюминия при легировании углеродными нанотрубками, учитывая фактор кластеризации при концентрации x > 0.03. Используй синтаксис LaTeX.",
+print(f"Загрузка проверочных заданий из {VAL_DATASET_PATH}...")
+try:
+    with open(VAL_DATASET_PATH, "r", encoding="utf-8") as f:
+        val_data = json.load(f)
     
-    # Тест 2: Проверка математического решения (Высшая математика)
-    "Найди аналитическое решение дифференциального уравнения первого порядка: dy/dx + 2xy = x * e^(-x^2) при начальном условии y(0) = 1. Распиши шаги в формате LaTeX."
-]
+    # Выбираем случайные задачи из валидационной выборки
+    random.seed(42) # Фиксируем seed, чтобы при повторном запуске тесты были те же самые
+    test_samples = random.sample(val_data, min(NUM_TEST_SAMPLES, len(val_data)))
+except Exception as e:
+    print(f"[Предупреждение] Не удалось загрузить {VAL_DATASET_PATH}: {e}")
+    print("Используются резервные встроенные промпты.")
+    # Резервный вариант, если файла валидации нет под рукой
+    test_samples = [
+        {"prompt": "Найди аналитическое решение дифференциального уравнения: dy/dx + 2xy = x * e^(-x^2) при y(0) = 1.", "response": "Эталон отсутствует"},
+        {"prompt": "Выведи уравнение изменения предела прочности сплава от концентрации нанотрубок x.", "response": "Эталон отсутствует"}
+    ]
 
 SYSTEM_PROMPT = (
     "You are an AI assistant. Format your answers as follows: "
@@ -44,41 +44,49 @@ SYSTEM_PROMPT = (
 )
 
 # ==========================================
-# 3. ЗАПУСК ИНФЕРЕНСА
+# 3. ЗАПУСК ЭКЗАМЕНА
 # ==========================================
-print("\n--> Запуск тестирования обученной модели...\n")
+print("\n--> Запуск валидационного тестирования...\n")
 
-for i, user_query in enumerate(TEST_PROMPTS, 1):
-    print("=" * 60)
-    print(f"ТЕСТОВОЕ ЗАДАНИЕ №{i}:")
-    print(user_query)
-    print("=" * 60)
-    print("Ответ модели:\n")
+for i, sample in enumerate(test_samples, 1):
+    user_query = sample["prompt"] if isinstance(sample, dict) else sample
     
-    # Формируем промпт в точном соответствии с тем, как модель обучалась
+    print("=" * 80)
+    print(f"ЗАДАНИЕ №{i} ИЗ ВАЛИДАЦИОННОЙ ВЫБОРКИ:")
+    print(user_query)
+    print("=" * 80)
+    
+    # Если мы загрузили данные из JSON, покажем эталон для сравнения человеком
+    if isinstance(sample, dict) and "response" in sample:
+        print("\n[ЭТАЛОН ИЗ ДАТАСЕТА (Как ответила o1-генератор)]:")
+        print(sample["response"])
+        print("-" * 40)
+    
+    print("\n[ОТВЕТ ВАШЕЙ ДООБУЧЕННОЙ МОДЕЛИ]:\n")
+    
     full_prompt = (
         f"Система: {SYSTEM_PROMPT}\n\n"
         f"Пользователь: {user_query}\n\n"
         f"Система: <Thought>\n"
     )
     
-    # Запускаем генерацию в режиме стриминга (токен за токеном), 
-    # чтобы ответ плавно выводился на экран без задержек
     response_stream = llm(
         full_prompt,
         max_tokens=1500,
-        temperature=0.2, # Низкая температура для строгости математики
-        stop=["Пользователь:", "Система:"], # Стоп-токены, чтобы модель не уходила в бесконечный цикл
+        temperature=0.2,
+        stop=["Пользователь:", "Система:"],
         stream=True
     )
     
-    # Печатаем начальный тег, так как мы его жестко задали в full_prompt
     print("<Thought>", end="", flush=True)
-    
     for chunk in response_stream:
-        token = chunk["choices"][0]["delta"].get("content", "")
-        print(token, end="", flush=True)
-        
-    print("\n\n") # Отступ между тестами
+        if "choices" in chunk and len(chunk["choices"]) > 0:
+            choice = chunk["choices"][0]
+            if "text" in choice:
+                print(choice["text"], end="", flush=True)
+            elif "delta" in choice and "content" in choice["delta"]:
+                print(choice["delta"]["content"], end="", flush=True)
+                
+    print("\n\n")
 
-print("--> Тестирование завершено.")
+print("--> Экзамен завершен. Оцените точность формул и логики вашей модели!")
