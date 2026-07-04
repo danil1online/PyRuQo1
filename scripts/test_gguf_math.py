@@ -76,7 +76,7 @@ for i, user_query in enumerate(TEST_PROMPTS, 1):
     print("<Thought>", end="", flush=True)
     
     for chunk in response_stream:
-        token = chunk["choices"][0]["text"]
+        token = chunk["choices"][0]["delta"].get("content", "")
         print(token, end="", flush=True)
         
     print("\n\n") # Отступ между тестами
