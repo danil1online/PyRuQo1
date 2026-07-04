@@ -117,11 +117,12 @@ training_args = TrainingArguments(
     lr_scheduler_type="constant",
     save_strategy="steps",
     save_steps=100,                    # Сохранять чекпоинт каждые 100 шагов
-    report_to="none",                   # Отключаем отправку логов в сторонние сервисы (wandb)
-    evaluation_strategy="steps",       # Считать метрики валидации по шагам
+    report_to="none",                  # Отключаем отправку логов в сторонние сервисы (wandb)
+    eval_strategy="steps",             # Считать метрики валидации по шагам
     eval_steps=50,                     # Запускать валидацию каждые 50 шагов обучения
     per_device_eval_batch_size=1,      # Размер батча для валидации
     do_eval=True,                      # Включить режим оценки
+    max_seq_length=2048,
 )
 
 # ==========================================
@@ -130,12 +131,11 @@ training_args = TrainingArguments(
 # Используем SFTTrainer (Supervised Fine-Tuning) из библиотеки TRL
 trainer = SFTTrainer(
     model=model,
-    train_dataset=dataset["train"],       # Передаем строго обучающий сплит
-    eval_dataset=dataset["validation"],   # Передаем валидационный сплит
+    train_dataset=dataset["train"],
+    eval_dataset=dataset["validation"],
     peft_config=peft_config,
-    max_seq_length=2048,
     formatting_func=formatting_prompts_func,
-    args=training_args,
+    args=training_args, # Трейнер сам заберет длину контекста отсюда!
 )
 
 print("--> Окружение настроено. Запуск процесса обучения...")
