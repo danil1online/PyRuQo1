@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 # Импортируем компоненты нейросетевого парсера формул
 from marker.convert import convert_single_pdf
-from marker.models import load_models
+from marker.models import load_all_models
 
 
 
@@ -33,7 +33,7 @@ for server in SERVERS_POOL:
 # ==========================================
 print("--> Загрузка нейросетей распознавания математического текста (Marker)...")
 # Инициализация моделей Marker (выполняется 1 раз при старте)
-marker_models = load_models()
+marker_models = load_all_models()
 
 def parse_pdf_to_math_markdown(file_path):
     """Превращает PDF в Markdown с сохранением сложных формул в формате LaTeX"""
