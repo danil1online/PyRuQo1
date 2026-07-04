@@ -15,7 +15,7 @@ from marker.models import load_models
 # 1. КОНФИГУРАЦИЯ СЕРВЕРОВ И ПУТЕЙ
 # ==========================================
 OUTPUT_FILE = "university_math_dataset.json"
-PDF_FOLDER = "./university_pdfs" # Положите сюда ваши PDF
+PDF_FOLDER = "./university_pdfs_math" # Положите сюда ваши PDF
 
 # ПОЛНЫЕ ИСПРАВЛЕННЫЕ АДРЕСА СЕРВЕРОВ llama.cpp
 SERVERS_POOL = [
