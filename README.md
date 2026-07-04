@@ -423,7 +423,7 @@ python3 scripts/test_gguf_math.py
 
  1.3.8. Запустите скрипт объединения датасетов с одновременным разделением итогового датасета на train и val
  ```bash
- python3 scripts/mix_datasets.py
+ python3 scripts/mix_datasets_train_val.py
  ```
 
 2. QLoRA-обучение модели (Fine-Tuning)
