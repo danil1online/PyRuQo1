@@ -231,7 +231,7 @@ python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../unive
  1.3.2. Запустите скрипт многопоточной генерации:
  ```bash
  # Запускаем скрипт в фоне. Логи будут писаться в файл dataset_gen.log
- nohup python3 scripts/build_dataset_multi_server.py > dataset_gen.log 2>&1 &
+ nohup python3 -u scripts/build_dataset_multi_server.py > dataset_gen.log 2>&1 &
  # Посмотреть, как идет процесс в реальном времени:
  tail -f dataset_gen.log
  ```
@@ -244,7 +244,7 @@ python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../unive
 Этот этап выполняется строго на ПК с видеокартой RTX 3090 (24 ГБ VRAM).
 Скрипт автоматически скачает базовую модель GigaChat-20B-A3B-instruct-v1.5, сквантует её в 4 бита для экономии памяти видеокарты, подключит ваш созданный датасет и начнет тренировку.
 ```bash
-nohup python3 scripts/train_qlora.py > train.log 2>&1 &
+nohup python3 -u scripts/train_qlora.py > train.log 2>&1 &
 # Мониторинг обучения и температуры видеокарты в соседних вкладках:
 tail -f train.log
 watch -n 1 nvidia-smi
@@ -385,7 +385,7 @@ system_prompt = (
 2. Положите несколько математических или физических PDF-статей в папку university_pdfs (скрипт создаст её при первом запуске, если её не было).
 3. Запустите скрипт через nohup, чтобы процесс не прервался при закрытии терминала:
 ```bash
-nohup python3 scripts/build_dataset_multi_server_math.py > dataset_math.log 2>&1 &
+nohup python3 -u scripts/build_dataset_multi_server_math.py > dataset_math.log 2>&1 &
 ```
 4. Следите за ходом извлечения формул и отправки на сервера одной командой:
 ```bash
