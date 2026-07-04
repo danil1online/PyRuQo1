@@ -77,18 +77,19 @@ def split_math_chunks(text, max_chars=3500, overlap=500):
 # 3. ПОТОКОБЕЗОПАСНЫЙ ЗАПРОС К API СЕРВЕРОВ
 # ==========================================
 def worker_query_api(context_chunk):
-    """Забирает свободный адрес сервера, отправляет запрос и возвращает JSON"""
+    """
+    Адаптированная функция для нативных o1/Reasoning моделей (Qwen 35B).
+    Извлекает нативные мысли из reasoning_content и собирает идеальный датасет.
+    """
     server_url = available_servers.get()
     
-    # Жесткий системный промпт для генерации точных математических задач и вывода формул
+    # Системный промпт теперь простой и текстовый. Модели больше НЕ нужно генерировать JSON.
     system_prompt = (
         "Ты — профессор высшей математики и теоретической физики. Перед тобой фрагмент научной статьи "
         "с формулами в формате LaTeX. Выбери из текста ключевое математическое уравнение или теоретический вывод. "
         "Сформулируй сложную задачу, требующую доказать, вывести или решить это уравнение. "
-        "В поле 'thought' пошагово распиши математическую логику решения, промежуточные преобразования и законы. "
-        "В поле 'response' запиши финальный структурированный ответ и конечную формулу. "
-        "И в вопросе, и в рассуждениях, и в ответе используй СТРОГИЙ синтаксис LaTeX для математических символов. "
-        "Выведи результат СТРОГО в формате JSON с ключами: 'prompt', 'thought', 'response'."
+        "Сначала выдай сформулированную задачу, а затем напиши подробное итоговое решение. "
+        "Для всех математических символов и формул используй СТРОГИЙ синтаксис LaTeX."
     )
     
     user_prompt = f"Фрагмент научной публикации с LaTeX-формулами:\n\"\"\"\n{context_chunk}\n\"\"\""
@@ -98,25 +99,57 @@ def worker_query_api(context_chunk):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.2,            # Низкая температура для уменьшения галлюцинаций в математике
-        "max_tokens": 2000,            # Увеличили лимит, чтобы o1 успела расписать вывод формул
-        "response_format": {"type": "json_object"} # Гарантия валидного JSON от сервера llama.cpp
+        "temperature": 0.2, # Низкая температура для строгости математики
+        "max_tokens": 2500  # Даем запас токенов на вывод формул
+        # "response_format" УБРАН НАВСЕГДА — он ломал reasoning-модель!
     }
     headers = {"Content-Type": "application/json"}
     
     try:
-        # Увеличен таймаут до 3 минут: вывод математических формул требует времени
-        response = requests.post(server_url, headers=headers, json=payload, timeout=180)
+        # Ставим таймаут в 5 минут, так как 35B модель на сложных чанках может думать долго
+        response = requests.post(server_url, headers=headers, json=payload, timeout=300)
+        
         if response.status_code == 200:
-            content_str = response.json()["choices"]["message"]["content"]
-            return json.loads(content_str)
+            result_json = response.json()
+            choice = result_json["choices"][0]["message"]
+            
+            # 1. Извлекаем финальный текстовый ответ (там будут и задача, и решение)
+            full_response_text = choice.get("content", "").strip()
+            
+            # 2. ИЗВЛЕКАЕМ НАТИВНЫЕ МЫСЛИ МОДЕЛИ (Reasoning)
+            # Если llama.cpp отдает их в reasoning_content (как в curl)
+            thought_text = choice.get("reasoning_content", "").strip()
+            
+            # Страховка: если сервер отдал мысли в другом поле
+            if not thought_text:
+                thought_text = choice.get("data", {}).get("reasoning_content", "").strip()
+                
+            # Если модель сгенерировала глубокие мысли
+            if full_response_text and thought_text:
+                # Пакуем данные в формат вашего датасета
+                return {
+                    "prompt": f"На основе фрагмента статьи решите аналитическую задачу: {context_chunk[:150]}...",
+                    "thought": thought_text,
+                    "response": full_response_text
+                }
+            elif full_response_text:
+                # Если мыслей нет (вдруг отключились), пишем базовый лог рассуждения
+                return {
+                    "prompt": f"Решите математическую задачу на основе текста: {context_chunk[:150]}...",
+                    "thought": "Анализ предоставленного математического контекста и извлечение формул.",
+                    "response": full_response_text
+                }
+        else:
+            print(f"\n[Ошибка API] Сервер {server_url} вернул код {response.status_code}: {response.text}")
+            
     except Exception as e:
-        print(f"\n[Сетевой сбой] Сервер {server_url} не ответил или прислал поврежденные данные.")
+        print(f"\n[Сетевой сбой] Ошибка связи с сервером {server_url}: {e}")
     finally:
-        # Обязательно освобождаем сервер и возвращаем его в очередь
+        # В любом случае возвращаем сервер в пул свободных
         available_servers.put(server_url)
         
     return None
+
 
 # ==========================================
 # 4. ДИСПЕТЧЕР КОНВЕЙЕРА (MAIN)
