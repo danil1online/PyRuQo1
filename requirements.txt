@@ -2,11 +2,11 @@
 torch==2.4.1
 accelerate==0.34.2
 
-# Стек дообучения Hugging Face (Зафиксирован для исключения backtracking)
-transformers==4.44.2
-peft==0.12.0
+# Стек дообучения Hugging Face (Скорректирован под требования marker-pdf)
+transformers==4.46.3
+peft==0.13.2
 bitsandbytes==0.43.3
-trl==0.9.6
+trl==0.11.4
 datasets==2.21.0
 
 # Парсинг документов и логистика данных
