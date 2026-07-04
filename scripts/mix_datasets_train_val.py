@@ -2,7 +2,7 @@ import json
 import random
 
 # Исходные файлы из генераторов
-TEXT_JSON = "university_text_dataset.json"
+TEXT_JSON = "university_thinking_dataset.json"
 MATH_JSON = "university_math_dataset.json"
 
 # Итоговые файлы для обучения
