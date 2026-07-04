@@ -462,7 +462,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  ```bash
  python3 scripts/mix_datasets_train_val.py
  ```
- 1.3.9. При необходимости (как в [описанной конфигурации](README.md#использованные-пк)), скопируйте файлы `university_train.json` и `university_val.json` на ПК, где установлена RTX 3090, остановите на нем llama.cpp и остальные программы, которые могут потреблять VRAM и RAM, скачайте репозиторий и установите все необходимые библиотеки.    
+ 1.3.9. При необходимости (как в [описанной конфигурации](#использованные-пк)), скопируйте файлы `university_train.json` и `university_val.json` на ПК, где установлена RTX 3090, остановите на нем llama.cpp и остальные программы, которые могут потреблять VRAM и RAM, скачайте репозиторий и установите все необходимые библиотеки.    
 
 2. QLoRA-обучение модели (Fine-Tuning)
 
