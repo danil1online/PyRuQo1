@@ -485,6 +485,30 @@ nohup python3 -u scripts/train_qlora.py > train.log 2>&1 &
 tail -f train.log
 watch -n 1 nvidia-smi
 ```
+***Результат для объема данных (тестирование скрипта): 51 train и 6 validation***:
+```bash
+tail -f train.log
+nohup: ignoring input
+--> Начинается процесс подготовки к обучению...
+Загружен train: 51 строк, validation: 6 строк.
+Принудительное форматирование колонок датасета...
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:29<00:00,  3.31s/it]
+trainable params: 6,422,528 || all params: 20,595,722,240 || trainable%: 0.0312
+--> Окружение настроено. Запуск процесса обучения...
+  0%|                                                                                                                                       | 0/6 [00:00<?, ?it/s]`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+/home/user/work/o1_gigachat-20b-a3b_lora_npi/env/lib/python3.10/site-packages/torch/utils/checkpoint.py:295: FutureWarning: `torch.cpu.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cpu', args...)` instead.
+  with torch.enable_grad(), device_autocast_ctx, torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):  # type: ignore[attr-defined]
+{'loss': 1.4611, 'grad_norm': 0.37789636850357056, 'learning_rate': 0.0002, 'epoch': 0.31}                                                                        
+{'eval_loss': 1.86099374294281, 'eval_runtime': 9.5703, 'eval_samples_per_second': 0.627, 'eval_steps_per_second': 0.627, 'eval_num_tokens': 28910.0, 'eval_mean_token_accuracy': 0.5922687103350958, 'epoch': 0.31}                                                                                                                 
+{'loss': 1.3991, 'grad_norm': 0.30157217383384705, 'learning_rate': 0.0002, 'epoch': 0.63}                                                                        
+{'eval_loss': 1.7761363983154297, 'eval_runtime': 9.4687, 'eval_samples_per_second': 0.634, 'eval_steps_per_second': 0.634, 'eval_num_tokens': 55109.0, 'eval_mean_token_accuracy': 0.6016164720058441, 'epoch': 0.63}                                                                                                               
+{'loss': 1.3593, 'grad_norm': 0.32808053493499756, 'learning_rate': 0.0002, 'epoch': 0.94}                                                                        
+{'eval_loss': 1.7251677513122559, 'eval_runtime': 9.5046, 'eval_samples_per_second': 0.631, 'eval_steps_per_second': 0.631, 'eval_num_tokens': 85113.0, 'eval_mean_token_accuracy': 0.6078645984331766, 'epoch': 0.94}                                                                                                               
+{'train_runtime': 324.0045, 'train_samples_per_second': 0.157, 'train_steps_per_second': 0.019, 'train_loss': 1.406495173772176, 'num_tokens': 85113.0, 'mean_token_accuracy': 0.6587841504563888, 'epoch': 0.94}                                                                                                                    
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 6/6 [05:23<00:00, 54.00s/it]
+--> Обучение успешно завершено! Адаптер сохранен в: ./o1_gigachat_university_lora
+```
+
 После завершения обучения в каталоге проекта будет создана папка ./o1_gigachat_university_lora. В ней будут лежать обученные веса адаптера (матрицы низкого ранга) объемом около 100–200 МБ.
 
 3. Слияние весов (Merge) и создание GGUF
@@ -522,6 +546,18 @@ watch -n 1 nvidia-smi
  ```
  Скрипт загружает базовую модель послойно (не всю сразу), подтягивает веса обученного адаптера из ./o1_gigachat_university_lora, математически складывает их и сохраняет полноценную FP16-модель частями по 2 ГБ в папку ./merged_o1_gigachat_university.
 
+ Вариант ответа:
+ ```bash
+ --> Запуск оптимизированного слияния для ПК с 64 ГБ RAM...
+ Загрузка базовой модели частями (low_cpu_mem_usage)...
+ Loading checkpoint shards: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:03<00:00,  2.67it/s]
+ Подключение LoRA-адаптера...
+ Слияние весов (Merge)...
+ Сохранение результата в ./merged_o1_gigachat_university...
+ --> Слияние успешно завершено!
+ ```
+ Время выполнения при размере обученного адаптера из ./o1_gigachat_university_lora в 24 Мб ~10 минут.
+
 4. Конвертация и Квантование в формат GGUF
 
  4.1. Подготовка компилятора и сборка llama.cpp
@@ -536,7 +572,10 @@ watch -n 1 nvidia-smi
  cmake -B build -DGGML_CUDA=ON
  cmake --build build --config Release -j$(nproc)
 
- # Установка зависимостей конвертера
+ # Установка зависимостей конвертера. Сначала отключаем текущее окружение, потом создаем новое и ставим все в него
+ deactivate
+ python3.10 -m venv env
+ source env/bin/activate
  pip3 install -r requirements.txt
  ```
 
@@ -545,7 +584,7 @@ watch -n 1 nvidia-smi
  Переведите сохраненную на этапе слияния модель в монолитный файл формата GGUF:
 
  ```bash
- python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../university_model_bf16.gguf
+ python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../university_model_bf16.gguf --trust-remote-code
  ```
  Будет создан файл university_model_f16.gguf размером ~40 ГБ.
 
@@ -561,7 +600,14 @@ watch -n 1 nvidia-smi
  ./build/bin/llama-quantize ../university_model_bf16.gguf ../university_model_Q8_0.gguf Q8_0
  ```
 
- Итог: В корневой директории появится готовый к локальному инференсу файл university_model_Q4_K_M.gguf размером около 13–14 ГБ.
+ Итог: В корневой директории появится готовый к локальному инференсу файл university_model_Q4_K_M.gguf размером около 13–14 ГБ:
+ ```bash
+ llama_model_quantize_impl: model size  = 39277.95 MiB (16.00 BPW)
+ llama_model_quantize_impl: quant size  = 11910.18 MiB (4.85 BPW)
+
+ llama_quantize: quantize time = 340837.13 ms
+ llama_quantize:    total time = 340837.13 ms
+ ```
 
  4.4. Очистка временных ресурсов
 
@@ -575,9 +621,15 @@ watch -n 1 nvidia-smi
 5. Тестирование 
 
 ```bash
+deactivate
+cd ..
+source env/bin/activate
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install llama-cpp-python
-python3 scripts/test_gguf_math.py
+python3 scripts/test_gguf_math.py > test.log 2>&1 &
 ```
+--> `Ctrl+C`
+
+Ответ будет выведен на экран и записан в `test.log`. Пример вывода модели, обученной на 51 примере представлен в файле [test.log](logs_example/test.log)
 
 ## Acknowledgment
 Roman Zaycev, [SRSPU(NPI)](https://www.npi-tu.ru/).
