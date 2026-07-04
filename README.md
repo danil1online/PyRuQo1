@@ -505,7 +505,7 @@ watch -n 1 nvidia-smi
  Сквантуйте модель в формат Q4_K_M (оптимальный баланс размера и интеллекта для 24 ГБ видеопамяти):
 
  ```bash
- ./build/bin/llama-quantize ../university_model_f16.gguf ../university_model_Q4_K_M.gguf Q4_K_M
+ ./build/bin/llama-quantize ../university_model_bf16.gguf ../university_model_Q4_K_M.gguf Q4_K_M
  ```
  или
  ```bash
