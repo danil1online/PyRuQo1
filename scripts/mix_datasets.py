@@ -2,9 +2,9 @@ import json
 import random
 
 # Пути к вашим сгенерированным файлам
-TEXT_JSON = "university_text_dataset.json"
+TEXT_JSON = "university_thinking_dataset.json"
 MATH_JSON = "university_math_dataset.json"
-FINAL_JSON = "university_thinking_dataset.json" # Этот файл пойдет в train_qlora.py
+FINAL_JSON = "university_text_dataset.json" # Этот файл пойдет в train_qlora.py
 
 print("--> Начало процесса смешивания датасетов...")
 
