@@ -368,7 +368,7 @@ python3 scripts/test_gguf_math.py
 
 ### Использованные ПК
 
-1. Первый ПК -- для формирования датасета
+1. Первый ПК. Использован как центральный / управляющий ПК при формировании датасета
 
 IP: 192.168.2.69
 
@@ -379,11 +379,11 @@ IP: 192.168.2.69
 - RTX 3050 VRAM 8 Gb
 - 2 x NVMe 1 Tb
 2. Второй ПК 
-* сначала для инференса условно "идеальной" модели Qwen3.6-35B-A3B-UD-Q4_K_M.gguf в llama.cpp IP http://195.63.145.3:8181
+* использован сначала для инференса условно "идеальной" модели Qwen3.6-35B-A3B-UD-Q4_K_M.gguf в llama.cpp IP http://195.63.145.3:8181
 ```sh
 ExecStart=/home/user/llama.cpp/build/bin/llama-server -m /home/user/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf -ngl 99 -c 65536 -b 8192 -ub 256 -t 4 --flash-attn on --timeout 600 --cache-type-k q4_0 --cache-type-v q4_0 --host 0.0.0.0 --port 8181
 ``` 
-* затем на этапе обучения LoRA 
+* затем использован на этапе обучения QLoRA 
 
 Характеристики
 - Ubuntu 22.04
