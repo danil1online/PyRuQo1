@@ -112,7 +112,7 @@ training_args = SFTConfig(
     eval_steps=2, 
     per_device_eval_batch_size=1, 
     do_eval=True, 
-    max_seq_length=2048,       # Оставляем заученный вами лимит в 2048 токенов
+    max_seq_length=8192,       # Оставляем заученный вами лимит в 2048 токенов
     dataset_text_field="text",
 )
 
