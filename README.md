@@ -636,6 +636,10 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 - [merge_low_ram_example_ygpt.py](scripts/merge_low_ram_example_ygpt.py), 
 - [test_gguf_math_ygpt.py](scripts/test_gguf_math_ygpt.py)
 
+Результаты представлены в:
+- [train_ygpt.log](logs_example/train_ygpt.log),
+- [test_ygpt.log](logs_example/test_ygpt.log)
+
 ## Acknowledgment
 Roman Zaycev, [SRSPU(NPI)](https://www.npi-tu.ru/).
 
