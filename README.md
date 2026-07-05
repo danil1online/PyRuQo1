@@ -631,16 +631,31 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 
 Ответ будет выведен на экран и записан в `test.log`. Пример вывода модели, обученной на 51 примере представлен в файле [test.log](logs_example/test.log)
 
-Аналогично проведено дообучение [YandexGPT-5-Lite-8B](https://huggingface.co/yandex/YandexGPT-5-Lite-8B-pretrain). Для этого использованы скрипты: 
+### Аналогично проведено дообучение [YandexGPT-5-Lite-8B](https://huggingface.co/yandex/YandexGPT-5-Lite-8B-pretrain). 
+
+Для этого использованы скрипты: 
 - [train_qlora_ygpt_micro_dataset.py](scripts/train_qlora_ygpt_micro_dataset.py), 
 - [merge_low_ram_ygpt.py](scripts/merge_low_ram_ygpt.py), 
 - [test_gguf_math_ygpt.py](scripts/test_gguf_math_ygpt.py)
 
-***Существенным отличием является возможность тренировать модель с контекстным окном 8192 на RTX3090 24Gb VRAM***
+***Существенным отличием является возможность тренировать модель с контекстным окном 8192 на RTX3090 24Gb VRAM. Причем, объем занятой памяти составил только 17Gb, что создает возможность для обучения модели еще с большим контекстным окном***
 
 Результаты представлены в:
 - [train_ygpt.log](logs_example/train_ygpt.log),
 - [test_ygpt.log](logs_example/test_ygpt.log)
+
+### Аналогично проведено дообучение [GigaChat3-10B-A1.8B-base](https://huggingface.co/ai-sage/GigaChat3-10B-A1.8B-base). 
+
+Для этого использованы скрипты: 
+- [train_qlora_gigachat3_micro_dataset.py](scripts/train_qlora_gigachat3_micro_dataset.py), 
+- [merge_low_ram_gigachat3.py](scripts/merge_low_ram_gigachat3.py), 
+- [test_gguf_math_gigachat3.py](scripts/test_gguf_math_gigachat3.py)
+
+***Существенным отличием является возможность тренировать модель с контекстным окном 8192 на RTX3090 24Gb VRAM. Причем, объем занятой памяти составил только 16Gb, что создает возможность для обучения модели еще с большим контекстным окном***
+
+Результаты представлены в:
+- [train_gigachat3.log](logs_example/train_gigachat3.log),
+- [test_gigachat3.log](logs_example/test_gigachat3.log)
 
 ## Acknowledgment
 Roman Zaycev, [SRSPU(NPI)](https://www.npi-tu.ru/).
