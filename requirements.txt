@@ -16,3 +16,7 @@ marker-pdf==0.3.10
 requests==2.32.3
 tqdm==4.66.5
 rich==13.9.4
+
+# Зависимости для токенизатора YandexGPT/Llama
+sentencepiece==0.2.0
+protobuf==5.26.1
