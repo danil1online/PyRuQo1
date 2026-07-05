@@ -105,6 +105,10 @@ model.config.pad_token_id = tokenizer.eos_token_id
 
 # Подготавливаем модель к обучению в пониженной точности
 model = prepare_model_for_kbit_training(model)
+# Добавьте этот цикл, чтобы нормализация MoE осталась в чистом BF16:
+for name, module in model.named_modules():
+    if "norm" in name or "gate" in name:
+        module.to(torch.bfloat16)
 
 # ==========================================
 # 4. НАСТРОЙКА LORA АДАПТЕРА
@@ -135,7 +139,7 @@ training_args = SFTConfig(
     logging_steps=10,                  # Как часто выводить логи в консоль
     num_train_epochs=1,                # 1 эпохи обычно достаточно для адаптации стиля
     # Страничный оптимизатор: сбрасывает излишки памяти в RAM вашего ПК (в ваши 256 ГБ)
-    optim="paged_adamw_32bit",         
+    optim="paged_adamw_8bit",         
     # Экономит до 30% видеопамяти, не пересчитывая все веса на проходе вперед
     gradient_checkpointing=True,       
     fp16=False,
