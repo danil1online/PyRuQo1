@@ -140,7 +140,7 @@ training_args = SFTConfig(
     eval_steps = 2, #eval_steps=50,     # Запускать валидацию каждые 50 шагов обучения, 2 -- для 51 train, 6 val
     per_device_eval_batch_size=1,      # Размер батча для валидации
     do_eval=True,                      # Включить режим оценки
-    max_seq_length=2048,
+    max_seq_length=8192,
     dataset_text_field="text",
 )
 
