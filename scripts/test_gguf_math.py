@@ -39,8 +39,8 @@ except Exception as e:
     ]
 
 SYSTEM_PROMPT = (
-    "You are an AI assistant. Format your answers as follows: "
-    "<Thought> Your thoughts (understanding, reasoning) </Thought> <output> Your answer </output>"
+    "Вы — ИИ-помощник. Отформатируйте свои ответы следующим образом: "
+    "<Thought> Ваши мысли (понимание, рассуждения) </Thought> <output> Ваш ответ </output>"
 )
 
 # ==========================================
@@ -67,7 +67,7 @@ for i, sample in enumerate(test_samples, 1):
     full_prompt = (
         f"Система: {SYSTEM_PROMPT}\n\n"
         f"Пользователь: {user_query}\n\n"
-        f"Система: <Thought>\n"
+        f"Система: "
     )
     
     response_stream = llm(
