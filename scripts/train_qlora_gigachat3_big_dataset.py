@@ -82,7 +82,11 @@ bnb_config = BitsAndBytesConfig(
 
 # Загружаем токенизатор
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
-tokenizer.pad_token = tokenizer.eos_token # Устанавливаем токен заполнения
+# 2. УСТАНОВКА PAD_TOKEN (Добавьте эти строки сразу после загрузки токенизатора):
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+    
+
 
 # Загружаем саму модель в 4-битном режиме
 model = AutoModelForCausalLM.from_pretrained(
@@ -92,6 +96,10 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",                     # Автоматически займет GPU 0
     trust_remote_code=True
 )
+
+# Обязательно синхронизируем конфиг модели с токенизатором, 
+# чтобы эмбеддинги для токена pad_token сопоставлялись правильно
+model.config.pad_token_id = tokenizer.eos_token_id
 
 # Подготавливаем модель к обучению в пониженной точности
 model = prepare_model_for_kbit_training(model)
