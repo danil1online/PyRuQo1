@@ -1,6 +1,6 @@
 # Базовые вычислительные библиотеки и CUDA
 torch==2.4.1
-accelerate==0.34.2
+accelerate==1.3.0
 
 # Стек дообучения Hugging Face (Скорректирован под требования marker-pdf)
 transformers==4.53.1
