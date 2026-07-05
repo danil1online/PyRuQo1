@@ -79,7 +79,7 @@ for i, sample in enumerate(test_samples, 1):
         full_prompt,
         max_tokens=1000,
         temperature=0.2,
-        repetition_penalty=1.2,
+        repeat_penalty=1.2,
         stop=["Пользователь:", "Система:", "<|im_end|>", "</output>"],
         stream=True
     )
