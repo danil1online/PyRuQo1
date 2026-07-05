@@ -91,8 +91,8 @@ if tokenizer.pad_token is None:
 
 # 2. Инициализируем конфиг с явным доверием удаленному коду
 # ХАК: Динамически перенаправляем неизвестный тип deepseek_v3 на известный qwen2_moe
-if "deepseek_v3" not in CONFIG_MAPPING:
-    CONFIG_MAPPING.register("deepseek_v3", CONFIG_MAPPING["qwen2_moe"])
+#if "deepseek_v3" not in CONFIG_MAPPING:
+#    CONFIG_MAPPING.register("deepseek_v3", CONFIG_MAPPING["qwen2_moe"])
 config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True)
 
 # Загружаем саму модель в 4-битном режиме
