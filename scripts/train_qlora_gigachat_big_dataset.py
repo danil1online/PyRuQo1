@@ -1,19 +1,3 @@
-import sys
-import transformers
-
-# 1. Принудительно выставляем флаг безопасности во всех возможных внутренних кэшах
-transformers.utils.import_utils._is_torch_version_safe_for_load = True
-
-# 2. Подменяем функцию во всех модулях, где она могла быть импортирована напрямую
-def fake_check_safe():
-    return True
-
-import transformers.utils.import_utils as hf_utils
-hf_utils.check_torch_load_is_safe = fake_check_safe
-
-import transformers.modeling_utils as modeling_utils
-modeling_utils.check_torch_load_is_safe = fake_check_safe
-
 import os
 import torch
 from datasets import load_dataset
