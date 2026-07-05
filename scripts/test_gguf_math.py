@@ -69,16 +69,22 @@ for i, sample in enumerate(test_samples, 1):
         f"Пользователь: {user_query}\n\n"
         f"Система: "
     )
+    full_prompt = (
+        f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
+        f"<|im_start|>user\n{user_query}<|im_end|>\n"
+        f"<|im_start|>assistant\n"
+    )
     
     response_stream = llm(
         full_prompt,
-        max_tokens=1500,
+        max_tokens=1000,
         temperature=0.2,
-        stop=["Пользователь:", "Система:"],
+        repetition_penalty=1.2,
+        stop=["Пользователь:", "Система:", "<|im_end|>", "</output>"],
         stream=True
     )
     
-    print("<Thought>", end="", flush=True)
+    #print("<Thought>", end="", flush=True)
     for chunk in response_stream:
         if "choices" in chunk and len(chunk["choices"]) > 0:
             choice = chunk["choices"][0]
