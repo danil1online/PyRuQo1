@@ -8,10 +8,17 @@ from transformers import (
     BitsAndBytesConfig,
     TrainingArguments,
 )
-from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
 from trl import SFTConfig  # Добавить эту строку в блок импортов
+
+# ХАК: Перехватываем метод index_add_ на уровне PyTorch, чтобы подружить BFloat16 и Float32 в MoE-слоях
+_orig_index_add = torch.Tensor.index_add_
+def _safe_index_add(self, dim, index, source, *args, **kwargs):
+    if self.dtype != source.dtype:
+        source = source.to(self.dtype)
+    return _orig_index_add(self, dim, index, source, *args, **kwargs)
+torch.Tensor.index_add_ = _safe_index_add
 
 # ==========================================
 # 1. КОНФИГУРАЦИЯ И ПУТИ
@@ -90,9 +97,6 @@ if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 # 2. Инициализируем конфиг с явным доверием удаленному коду
-# ХАК: Динамически перенаправляем неизвестный тип deepseek_v3 на известный qwen2_moe
-#if "deepseek_v3" not in CONFIG_MAPPING:
-#    CONFIG_MAPPING.register("deepseek_v3", CONFIG_MAPPING["qwen2_moe"])
 config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True)
 
 # Загружаем саму модель в 4-битном режиме
