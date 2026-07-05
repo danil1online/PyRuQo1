@@ -289,7 +289,7 @@ python scripts/merge_lora_example.py
 
 Предположим, такого ПК нет. Есть **64 ГБ** оперативной памяти. Это абсолютный технологический минимум, но его хватит для слияния модели GigaChat-20B-A3B (размер в FP16 составляет около 39–40 ГБ). Однако, если запустить процесс «в лоб», операционная система задействует файл подкачки (Swap), из-за чего слияние будет идти очень медленно или завершится аварийно (ошибкой Out of Memory в ОС). Чтобы слияние гарантированно прошло успешно на 64 ГБ ОЗУ, скрипт необходимо оптимизировать. **Главный секрет**: нельзя загружать модель в память одним куском. Hugging Face умеет читать и обрабатывать модель послойно прямо с диска. 
 
-**Оптимизированный скрипт** слияния для 64 ГБ RAM [merge_low_ram.py](scripts/merge_low_ram_example.py). 
+**Оптимизированный скрипт** слияния для 64 ГБ RAM [merge_low_ram.py](scripts/merge_low_ram_gigachat.py). 
 
 Этот вариант использует параметр low_cpu_mem_usage=True и пошаговую склейку слоев, снижая пиковое потребление ОЗУ до ~42–45 ГБ.
 
@@ -542,7 +542,7 @@ trainable params: 6,422,528 || all params: 20,595,722,240 || trainable%: 0.0312
  ```
  3.2.2. Запустите оптимизированный скрипт слияния из репозитория:
  ```bash
- python3 scripts/merge_low_ram_example.py
+ python3 scripts/merge_low_ram_gigachat.py
  ```
  Скрипт загружает базовую модель послойно (не всю сразу), подтягивает веса обученного адаптера из ./o1_gigachat_university_lora, математически складывает их и сохраняет полноценную FP16-модель частями по 2 ГБ в папку ./merged_o1_gigachat_university.
 
@@ -633,7 +633,7 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 
 Аналогично проведено дообучение [YandexGPT-5-Lite-8B](https://huggingface.co/yandex/YandexGPT-5-Lite-8B-pretrain). Для этого использованы скрипты: 
 - [train_qlora_ygpt_micro_dataset.py](scripts/train_qlora_ygpt_micro_dataset.py), 
-- [merge_low_ram_example_ygpt.py](scripts/merge_low_ram_example_ygpt.py), 
+- [merge_low_ram_ygpt.py](scripts/merge_low_ram_ygpt.py), 
 - [test_gguf_math_ygpt.py](scripts/test_gguf_math_ygpt.py)
 
 ***Существенным отличием является возможность тренировать модель с контекстным окном 8192 на RTX3090 24Gb VRAM***
