@@ -53,7 +53,12 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # Загружаем токенизатор YandexGPT
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True, legacy=False)
+tokenizer = AutoTokenizer.from_pretrained(
+    MODEL_NAME, 
+    trust_remote_code=True, 
+    use_fast=False,   # <-- Добавьте эту строку
+    legacy=False
+)
 tokenizer.pad_token = tokenizer.eos_token
 
 # Загружаем саму модель YandexGPT с флагом trust_remote_code
