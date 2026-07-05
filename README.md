@@ -1,6 +1,6 @@
 # o1_gigachat-20b-a3b_lora_npi
 
-Разработка основана на [Russian o1 / GigaChat 20B-A3B Instruct](https://huggingface.co/evilfreelancer/o1_gigachat-20b-a3b_lora), где обобщенно показано, как создан LoRA-адаптер для модели GigaChat-20B-A3B (и видимо для o1) на датасете, который, видимо, сейчас уже является [Dataset_of_Russian_thinking](https://huggingface.co/datasets/Egor-3926/Dataset_of_Russian_thinking). 
+Разработка основана на [Russian o1 / GigaChat 20B-A3B Instruct](https://huggingface.co/evilfreelancer/o1_gigachat-20b-a3b_lora), где показано, как создан o1-LoRA-адаптер для модели GigaChat-20B-A3B на датасете, который, видимо, сейчас уже является [Dataset_of_Russian_thinking](https://huggingface.co/datasets/Egor-3926/Dataset_of_Russian_thinking). Конфигурация обучения приведена в [файле](https://github.com/EvilFreelancer/impruver/blob/main/recipes/configs/GigaChat/20B-A3B_lora_o1.yaml). 
 
 ## Ограничения возможностей дообученных моделей
 
@@ -625,7 +625,7 @@ deactivate
 cd ..
 source env/bin/activate
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install llama-cpp-python
-python3 scripts/test_gguf_math.py > test.log 2>&1 &
+python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 ```
 --> `Ctrl+C`
 
@@ -637,7 +637,15 @@ Roman Zaycev, [SRSPU(NPI)](https://www.npi-tu.ru/).
 ## License
 Open source projects, [LICENSE](LICENSE).
 
-## Направления развития
+# Направления развития
+
+## Расширение набор данных для обучения
+
+Для качественного дообучения GigaChat-20B на рассуждения (Reasoning / o1-style) требуется от 2 000 до 10 000 качественных примеров. 
+Масштабирование датасета даст три ключевых эффекта:
+- Разнообразие паттернов окончания: Модель увидит сотни разных ситуаций, где списки логически завершаются (состоят из 3, 5, 12 пунктов, а не обрываются на полуслове), и научится вовремя останавливать генерацию.
+- Гибкость блока <Thought>: Видя разные тексты (гуманитарные, технические, экономические), модель начнет действительно анализировать контекст, а не воспроизводить заученный шаблон про «акторов регионального развития» (pp. 2-3).
+- Стабильность весов LoRA: При текущей 51 строке веса адаптера адаптируются под конкретные слова из датасета. При больших объемах они перенастроят внутреннее внимание модели на соблюдение самого формата (JSON, ChatML, теги) 
 
 ## Замена "образцовой" модели
 
@@ -839,7 +847,7 @@ def query_gigachat_max_api(context_chunk):
 
 Необходимо подставить нужную функцию (query_deepseek_api или query_gigachat_max_api) внутрь диспетчера балансировки [build_dataset_multi_server_math.py](scripts/build_dataset_multi_server_math.py) вместо старого вызова worker_query_api, и проект станет полноценным промышленным решением.
 
-## Дообучение больших моделей. Например, [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)
+## Дообучение бОльших моделей. Например, [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)
 
 Разница в размерах моделей огромна: базовая модель GigaChat-20B-A3B весит 39 ГБ, а Qwen3.6-35B-A3B — 71.9 ГБ в исходном формате BF16. Эта модель имеет почти в два раза больше физических параметров, что кардинально меняет системные требования к оборудованию. Дообучить эту модель методом QLoRA на вашем текущем железе можно, но процесс потребует жесткой оптимизации, а на этапе слияния весов компьютер со старыми 64 ГБ RAM полностью зависнет. Ниже приведен детальный расчет необходимых ресурсов и изменений.
 
