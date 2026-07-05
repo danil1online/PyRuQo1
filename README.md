@@ -584,7 +584,7 @@ trainable params: 6,422,528 || all params: 20,595,722,240 || trainable%: 0.0312
  Переведите сохраненную на этапе слияния модель в монолитный файл формата GGUF:
 
  ```bash
- python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../university_model_bf16.gguf --trust-remote-code
+ python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../university_model_bf16.gguf
  ```
  Будет создан файл university_model_f16.gguf размером ~40 ГБ.
 
