@@ -209,7 +209,7 @@ tail -f dataset_math.log
 
 1. Пропускаем гуманитарные/простые статьи через парсер fitz и сгенерируйте первую часть JSON-файла.
 2. Пропустите физико-математические статьи через парсер Marker и генерируем вторую часть JSON-файла с LaTeX.
-3. Объединяем оба JSON-файла в один большой датасет перед запуском train_qlora.py. Для этого используем [микро-скрипт](scripts/mix_datasets.py). На выходе сформируется единый файл `university_text_dataset.json`, полностью готовый для передачи в вариант train_qlora.py, [работающий без validation](scripts/train_qlora.py#L35). Запуск этого скрипта:
+3. Объединяем оба JSON-файла в один большой датасет перед запуском train_qlora_gigachat_big_dataset.py. Для этого используем [микро-скрипт](scripts/mix_datasets.py). На выходе сформируется единый файл `university_text_dataset.json`, полностью готовый для передачи в вариант train_qlora_gigachat_big_dataset.py, [работающий без validation](scripts/train_qlora_gigachat_big_dataset.py#L35). Запуск этого скрипта:
 ```bash
 python3 scripts/mix_datasets.py
 ```
@@ -231,7 +231,7 @@ python3 scripts/mix_datasets.py
 [Обновленный скрипт смешивания и разбиения](scripts/mix_datasets_train_val.py)
 
 Теперь, когда у вас есть два файла, загрузку данных и параметры SFTTrainer нужно сделать так, что модель видела оба сегмента.
-Реализуем [блок загрузки данных в вашем скрипте обучения](scripts/train_qlora.py#L29):
+Реализуем [блок загрузки данных в вашем скрипте обучения](scripts/train_qlora_gigachat_big_dataset.py#L29):
 ```python
 # Указываем словарь из двух локальных файлов
 data_files = {
@@ -243,9 +243,9 @@ data_files = {
 dataset = load_dataset("json", data_files=data_files)
 print(f"Загружен train: {len(dataset['train'])} строк, validation: {len(dataset['validation'])} строк.")
 ```
-А в блоке настроек [TrainingArguments](scripts/train_qlora.py#L94) добавьте параметры для автоматического подсчета ошибки валидации:
+А в блоке настроек [SFTConfig](scripts/train_qlora_gigachat_big_dataset.py#L120) добавляем параметры для автоматического подсчета ошибки валидации:
 ```python
-training_args = TrainingArguments(
+training_args = SFTConfig(
     # ... ваши старые параметры (batch_size, bf16=True и т.д.) ...
     
     evaluation_strategy="steps",       # Считать метрики валидации по шагам
@@ -254,25 +254,23 @@ training_args = TrainingArguments(
     do_eval=True,                      # Включить режим оценки
 )
 ```
-И передайте валидационный сплит в сам [SFTTrainer](scripts/train_qlora.py#L119):
+И передайте валидационный сплит в сам [SFTTrainer](scripts/train_qlora_gigachat_big_dataset.py#L151):
 ```python
 trainer = SFTTrainer(
     model=model,
-    train_dataset=dataset["train"],       # Передаем строго обучающий сплит
-    eval_dataset=dataset["validation"],   # Передаем валидационный сплит
+    train_dataset=dataset["train"],
+    eval_dataset=dataset["validation"],
     peft_config=peft_config,
-    max_seq_length=2048,
-    formatting_func=formatting_prompts_func,
-    args=training_args,
+    args=training_args, # Трейнер сам заберет длину контекста отсюда!
 )
 ```
 Во время обучения в консоли рядом со значением Loss (ошибка на обучающих данных) начнет появляться колонка Validation Loss (ошибка на данных, которые модель не видит при оптимизации весов). **Пока оба значения плавно падают вниз — модель успешно учится выводить формулы. Если Loss падает, а Validation Loss пополз вверх — началось переобучение (модель зазубривает ваш датасет), и процесс тренировки можно останавливать.**
 
-После этого можно смело запускать второй шаг вашей инструкции — `python3 scripts/train_qlora.py`. 
+После этого можно смело запускать второй шаг вашей инструкции — `python3 scripts/train_qlora_gigachat_big_dataset.py`. 
 
 ## Скрипт обучения на собственном датасете и объединение моделей
 
-Скрипт обучения `python3 scripts/train_qlora.py` сохранит только маленькие веса адаптера (~100-200 МБ). Чтобы использовать модель полноценно (например, конвертировать её в GGUF для инференса), потребуется запустить [скрипт слияния (Merge)](scripts/merge_lora_example.py) базовой модели GigaChat-20B и сохраненного адаптера. 
+Скрипт обучения `python3 scripts/train_qlora_gigachat_big_dataset.py` сохранит только маленькие веса адаптера (~100-200 МБ). Чтобы использовать модель полноценно (например, конвертировать её в GGUF для инференса), потребуется запустить [скрипт слияния (Merge)](scripts/merge_lora_example.py) базовой модели GigaChat-20B и сохраненного адаптера. 
 
 Cлияние (Merge) нужно делать строго до финального квантования в GGUF (если такое планируется). Инструменты конвертации (такие как llama.cpp) не умеют напрямую склеивать 4-битные квантованные файлы GGUF с отдельными LoRA-адаптерами.
 
@@ -478,9 +476,11 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 2. QLoRA-обучение модели (Fine-Tuning)
 
 Этот этап выполняется строго на ПК с видеокартой RTX 3090 (24 ГБ VRAM).
-Скрипт автоматически скачает базовую модель GigaChat-20B-A3B-instruct-v1.5, сквантует её в 4 бита для экономии памяти видеокарты, подключит ваш созданный датасет и начнет тренировку.
+Скрипт автоматически скачает базовую модель GigaChat-20B-A3B-instruct-v1.5, сквантует её в 4 бита для экономии памяти видеокарты, подключит ваш созданный датасет и начнет тренировку. 
+
+***В данной команде используется train_qlora_gigachat_micro_dataset.py, так как для первых экспериментов был собран набор данных train:51; validation:6.***
 ```bash
-nohup python3 -u scripts/train_qlora.py > train.log 2>&1 &
+nohup python3 -u scripts/train_qlora_gigachat_micro_dataset.py > train.log 2>&1 &
 # Мониторинг обучения и температуры видеокарты в соседних вкладках:
 tail -f train.log
 watch -n 1 nvidia-smi
@@ -630,6 +630,11 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 --> `Ctrl+C`
 
 Ответ будет выведен на экран и записан в `test.log`. Пример вывода модели, обученной на 51 примере представлен в файле [test.log](logs_example/test.log)
+
+Аналогично проведено дообучение [YandexGPT-5-Lite-8B](https://huggingface.co/yandex/YandexGPT-5-Lite-8B-pretrain). Для этого использованы скрипты: 
+- [train_qlora_ygpt_micro_dataset.py](scripts/train_qlora_ygpt_micro_dataset.py), 
+- [merge_low_ram_example_ygpt.py](scripts/merge_low_ram_example_ygpt.py), 
+- [test_gguf_math_ygpt.py](scripts/test_gguf_math_ygpt.py)
 
 ## Acknowledgment
 Roman Zaycev, [SRSPU(NPI)](https://www.npi-tu.ru/).
