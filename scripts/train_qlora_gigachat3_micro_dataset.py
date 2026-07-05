@@ -4,6 +4,7 @@ from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    AutoConfig, 
     BitsAndBytesConfig,
     TrainingArguments,
 )
@@ -86,10 +87,14 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 # 2. УСТАНОВКА PAD_TOKEN (Добавьте эти строки сразу после загрузки токенизатора):
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
-    
+
+# 2. Инициализируем конфиг с явным доверием удаленному коду
+config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True)
+
 # Загружаем саму модель в 4-битном режиме
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
+    config=config, 
     return_dict=True,
     quantization_config=bnb_config,
     device_map="auto",                     # Автоматически займет GPU 0
