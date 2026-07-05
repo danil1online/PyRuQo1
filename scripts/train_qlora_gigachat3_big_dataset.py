@@ -4,13 +4,22 @@ from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    AutoConfig,  # <-- 1. ОБЯЗАТЕЛЬНО ДОБАВЬТЕ ЭТОТ ИМПОРТ
+    AutoConfig, 
     BitsAndBytesConfig,
     TrainingArguments,
 )
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
 from trl import SFTConfig  # Добавить эту строку в блок импортов
+
+# ХАК: Перехватываем метод index_add_ на уровне PyTorch, чтобы подружить BFloat16 и Float32 в MoE-слоях
+_orig_index_add = torch.Tensor.index_add_
+def _safe_index_add(self, dim, index, source, *args, **kwargs):
+    if self.dtype != source.dtype:
+        source = source.to(self.dtype)
+    return _orig_index_add(self, dim, index, source, *args, **kwargs)
+torch.Tensor.index_add_ = _safe_index_add
 
 # ==========================================
 # 1. КОНФИГУРАЦИЯ И ПУТИ
