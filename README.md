@@ -22,7 +22,20 @@
 - [Скрипт автоматического тестирования готовой GGUF-модели](#скрипт-автоматического-тестирования-готовой-gguf-модели)
 5. [Итоговый порядок запуска, а также минимальные технические требования](#итоговый-порядок-запуска-а-также-минимальные-технические-требования)
 - [Использованные ПК](#использованные-пк)
-- 
+- [Дообучение GigaChat-20B-A3B-instruct-v1.5-bf16. Детальное описание](#дообучение-gigachat-20b-a3b-instruct-v15-bf16-детальное-описание)
+- [Дообучение YandexGPT-5-Lite-8B](#дообучение-yandexgpt-5-lite-8b)
+- [Дообучение GigaChat3-10B-A1.8B-base](#дообучение-gigachat3-10b-a18b-base)
+6. Дополнительные материалы
+- [Acknowledgment](#acknowledgment)
+- [License](#license)
+- [Направления развития](#направления-развития)
+    - [Расширение набор данных для обучения](#расширение-набор-данных-для-обучения)
+    - [Замена "образцовой" модели](#замена-образцовой-модели)
+        - [Какую модель лучше выбрать для генерации научного датасета](#какую-модель-лучше-выбрать-для-генерации-научного-датасета)
+        - [Финансовый расчет: сколько это будет стоить?](#финансовый-расчет-сколько-это-будет-стоить)
+        - [Изменение авторизации](#изменение-авторизации)
+    - [Дообучение бОльших моделей. Например, Qwen3.6-35B-A3B](#дообучение-больших-моделей-например-qwen36-35b-a3b)
+        - [Что изменить в скрипте обучения под Qwen?](#что-изменить-в-скрипте-обучения-под-qwen)
 
 
 ## Ограничения возможностей дообученных моделей
@@ -509,29 +522,7 @@ nohup python3 -u scripts/train_qlora_gigachat_micro_dataset.py > train.log 2>&1 
 tail -f train.log
 watch -n 1 nvidia-smi
 ```
-***Результат для объема данных (тестирование скрипта): 51 train и 6 validation***:
-```bash
-tail -f train.log
-nohup: ignoring input
---> Начинается процесс подготовки к обучению...
-Загружен train: 51 строк, validation: 6 строк.
-Принудительное форматирование колонок датасета...
-Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:29<00:00,  3.31s/it]
-trainable params: 6,422,528 || all params: 20,595,722,240 || trainable%: 0.0312
---> Окружение настроено. Запуск процесса обучения...
-  0%|                                                                                                                                       | 0/6 [00:00<?, ?it/s]`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
-/home/user/work/o1_gigachat-20b-a3b_lora_npi/env/lib/python3.10/site-packages/torch/utils/checkpoint.py:295: FutureWarning: `torch.cpu.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cpu', args...)` instead.
-  with torch.enable_grad(), device_autocast_ctx, torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):  # type: ignore[attr-defined]
-{'loss': 1.4611, 'grad_norm': 0.37789636850357056, 'learning_rate': 0.0002, 'epoch': 0.31}                                                                        
-{'eval_loss': 1.86099374294281, 'eval_runtime': 9.5703, 'eval_samples_per_second': 0.627, 'eval_steps_per_second': 0.627, 'eval_num_tokens': 28910.0, 'eval_mean_token_accuracy': 0.5922687103350958, 'epoch': 0.31}                                                                                                                 
-{'loss': 1.3991, 'grad_norm': 0.30157217383384705, 'learning_rate': 0.0002, 'epoch': 0.63}                                                                        
-{'eval_loss': 1.7761363983154297, 'eval_runtime': 9.4687, 'eval_samples_per_second': 0.634, 'eval_steps_per_second': 0.634, 'eval_num_tokens': 55109.0, 'eval_mean_token_accuracy': 0.6016164720058441, 'epoch': 0.63}                                                                                                               
-{'loss': 1.3593, 'grad_norm': 0.32808053493499756, 'learning_rate': 0.0002, 'epoch': 0.94}                                                                        
-{'eval_loss': 1.7251677513122559, 'eval_runtime': 9.5046, 'eval_samples_per_second': 0.631, 'eval_steps_per_second': 0.631, 'eval_num_tokens': 85113.0, 'eval_mean_token_accuracy': 0.6078645984331766, 'epoch': 0.94}                                                                                                               
-{'train_runtime': 324.0045, 'train_samples_per_second': 0.157, 'train_steps_per_second': 0.019, 'train_loss': 1.406495173772176, 'num_tokens': 85113.0, 'mean_token_accuracy': 0.6587841504563888, 'epoch': 0.94}                                                                                                                    
-100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 6/6 [05:23<00:00, 54.00s/it]
---> Обучение успешно завершено! Адаптер сохранен в: ./o1_gigachat_university_lora
-```
+***Результат для объема данных (тестирование скрипта): 51 train и 6 validation представлен в файле [train.log](logs_example/train.log)***:
 
 После завершения обучения в каталоге проекта будет создана папка ./o1_gigachat_university_lora. В ней будут лежать обученные веса адаптера (матрицы низкого ранга) объемом около 100–200 МБ.
 
@@ -935,8 +926,8 @@ def query_gigachat_max_api(context_chunk):
 - Чтобы модель работала на вашей RTX 3090 с максимальной скоростью, квантуйте её строго в формат Q2_K или Q3_K_M (финальный файл займет около 14–17 ГБ и полностью займет видеокарту на инференсе).
 
 ### Что изменить в скрипте обучения под Qwen?
-В файле `scripts/train_qlora.py` потребуется заменить архитектурные слои, на которые вешается LoRA. У моделей Qwen они называются иначе, чем у GigaChat.
-Замените блок [LoraConfig](scripts/train_qlora.py#L77):
+В файлах `scripts/train_qloraХХХХ.py` потребуется заменить архитектурные слои, на которые вешается LoRA. У моделей Qwen они называются иначе, чем у GigaChat.
+Замените блок LoraConfig, например, в файле [train_qlora_gigachat_micro_dataset.py](scripts/train_qlora_gigachat_micro_dataset.py#L105):
 ```python
 peft_config = LoraConfig(
     r=16,
