@@ -139,9 +139,9 @@ training_args = SFTConfig(
     logging_steps=10,                  # Как часто выводить логи в консоль
     num_train_epochs=1,                # 1 эпохи обычно достаточно для адаптации стиля
     # Страничный оптимизатор: сбрасывает излишки памяти в RAM вашего ПК (в ваши 256 ГБ)
-    optim="paged_adamw_8bit",         
+    optim="paged_adamw_32bit",         
     # Экономит до 30% видеопамяти, не пересчитывая все веса на проходе вперед
-    gradient_checkpointing=True,       
+    gradient_checkpointing=False,       
     fp16=False,
     bf16=True,                             # Обучение в полуточности
     max_grad_norm=0.3,
