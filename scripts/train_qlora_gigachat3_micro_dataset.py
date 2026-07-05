@@ -99,7 +99,7 @@ config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     config=config, 
-    return_dict=True,
+    #return_dict=True,
     quantization_config=bnb_config,
     device_map="auto",                     # Автоматически займет GPU 0
     trust_remote_code=True
