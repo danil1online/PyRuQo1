@@ -3,7 +3,7 @@ torch==2.4.1
 accelerate==0.34.2
 
 # Стек дообучения Hugging Face (Скорректирован под требования marker-pdf)
-transformers==4.48.3
+transformers==4.53.1
 peft==0.19.1
 bitsandbytes==0.43.3
 trl==0.17.0
