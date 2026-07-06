@@ -1,0 +1,5 @@
+# GGUF конвертация (опционально, только для конвертации модели в GGUF)
+# Установка с поддержкой CUDA:
+#   CMAKE_ARGS="-DGGML_CUDA=ON" pip install -r requirements-gguf.txt
+
+llama-cpp-python>=0.3.0

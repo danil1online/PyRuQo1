@@ -1,0 +1,51 @@
+model:
+  name: "ai-sage/GigaChat-20B-A3B-instruct-v1.5-bf16"
+  trust_remote_code: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+  lora_dropout: 0.05
+  bias: "none"
+
+training:
+  output_dir: "./o1_gigachat_university_lora"
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-4
+  logging_steps: 10
+  num_train_epochs: 1
+  optim: "paged_adamw_32bit"
+  gradient_checkpointing: true
+  fp16: false
+  bf16: true
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  lr_scheduler_type: "constant"
+  save_strategy: "steps"
+  save_steps: 100
+  report_to: "none"
+  do_eval: true
+  eval_strategy: "steps"
+  eval_steps: 50
+  per_device_eval_batch_size: 1
+  max_seq_length: 2048
+  dataset_text_field: "text"
+
+dataset:
+  train_file: "university_train.json"
+  val_file: "university_val.json"
+
+merge:
+  low_ram: false
+  cpu_swap_gb: 40
+  output_dir: "./merged_o1_gigachat_university"
+  safe_serialization: true
+  max_shard_size: "5GB"
+
+gguf:
+  quantization: "Q4_K_M"
+  output_dir: "./gguf"
+  use_mlock: false
+  vocab_only: false

@@ -20,3 +20,8 @@ rich==13.9.4
 # Зависимости для токенизатора YandexGPT/Llama
 sentencepiece==0.2.0
 protobuf==5.26.1
+
+# Утилиты библиотеки npi
+PyYAML>=6.0
+click>=8.0
+psutil>=5.9
