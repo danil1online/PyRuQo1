@@ -12,12 +12,19 @@ sudo apt update && sudo apt install ocrmypdf tesseract-ocr-rus build-essential c
 
 ### 2. Установка библиотеки
 
+**Комплектование датасета** (torch 2.4.1 + marker-pdf 0.3.10):
 ```bash
-# Основной стек (обучение + генерация датасета)
-pip install -e ".[test]"
+pip install -e ".[ds,test]"
+```
 
-# + GGUF конвертация
-CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf,test]"
+**Обучение** (torch 2.6.0, без marker-pdf):
+```bash
+pip install -e ".[train,test]"
+```
+
+**GGUF конвертация** (опционально):
+```bash
+CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
 ```
 
 ### 3. Проверка системы
@@ -39,7 +46,7 @@ pyruqo1 split --input ./raw_journals --output-dir ./university_pdfs
 pyruqo1 generate --input ./university_pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
 ```
 
-**Математические текты (LaTeX-формулы, несколько серверов):**
+**Математические тексты (LaTeX-формулы, несколько серверов):**
 ```bash
 pyruqo1 generate --input ./math_pdfs --mode math --servers 'http://localhost:8079/v1/chat/completions,http://192.168.2.52:8181/v1/chat/completions'
 ```
@@ -49,20 +56,20 @@ pyruqo1 generate --input ./math_pdfs --mode math --servers 'http://localhost:807
 - Один флаг с разделителем: `--servers 'http://a,http://b'`
 
 Режимы:
-- `simple` — 1 сервер + гумманитарный текст (PDFParser)
+- `simple` — 1 сервер + гуманитарный текст (PDFParser)
 - `math` — 1 сервер + математические тексты с LaTeX (Marker-парсер)
-- `multi_server` — несколько серверов + гумманитарный текст
+- `multi_server` — несколько серверов + гуманитарный текст
 
 ### 6. Объединение датасетов
 
 **В один файл:**
 ```bash
-pyruqo1 mixds --mode simple --input university_thinking_dataset.json university_math_dataset.json
+pyruqo1 mixds university_thinking_dataset.json university_math_dataset.json --mode simple
 ```
 
 **В два файла (train + val):**
 ```bash
-pyruqo1 mixds --mode train_val --input university_thinking_dataset.json university_math_dataset.json
+pyruqo1 mixds university_thinking_dataset.json university_math_dataset.json --mode train_val
 ```
 
 ### 7. Обучение
@@ -178,12 +185,23 @@ tests/                 # базовые тесты
 
 ## Зависимости
 
-**Основные** (обучение + генерация датасета):
+### 1. Комплектование датасета (DS)
+
+torch 2.4.1 + marker-pdf 0.3.10:
 ```bash
-pip install -e "."
+pip install -e ".[ds]"
 ```
 
-**GGUF** (опционально, для конвертации):
+### 2. Обучение (Train)
+
+torch 2.6.0, без marker-pdf:
+```bash
+pip install -e ".[train]"
+```
+
+### 3. GGUF конвертация
+
+llama-cpp-python с поддержкой CUDA:
 ```bash
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
 ```
