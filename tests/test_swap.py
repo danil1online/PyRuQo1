@@ -18,13 +18,13 @@ sys.modules['llama_cpp.convert'] = MagicMock()
 
 
 def test_swap_defaults():
-    from npi.utils.swap import DEFAULT_SWAP_SIZE_GB, DEFAULT_SWAP_PATH
+    from pyruqo1.utils.swap import DEFAULT_SWAP_SIZE_GB, DEFAULT_SWAP_PATH
     assert DEFAULT_SWAP_SIZE_GB == 40
     assert DEFAULT_SWAP_PATH == "/tmp/npi_swapfile"
 
 
 def test_swap_functions_exist():
-    from npi.utils.swap import (
+    from pyruqo1.utils.swap import (
         create_swap_file,
         remove_swap_file,
         managed_swap,
@@ -39,7 +39,7 @@ def test_swap_functions_exist():
 
 
 def test_get_free_ram_gb():
-    from npi.utils.swap import get_free_ram_gb
+    from pyruqo1.utils.swap import get_free_ram_gb
     import psutil
     result = get_free_ram_gb()
     expected = psutil.virtual_memory().available / (1024 ** 3)
@@ -47,7 +47,7 @@ def test_get_free_ram_gb():
 
 
 def test_get_free_disk_gb():
-    from npi.utils.swap import get_free_disk_gb
+    from pyruqo1.utils.swap import get_free_disk_gb
     result = get_free_disk_gb("/tmp")
     assert isinstance(result, float)
     assert result >= 0

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Парсинг PDF в чанки. npi parse --input ./pdfs"""
-from npi.dataset import PDFParser, TextChunker
+"""Парсинг PDF в чанки. pyruqo1 parse --input ./pdfs"""
+from pyruqo1.dataset import PDFParser, TextChunker
 
 parser = PDFParser()
 texts = parser.parse_folder("./university_pdfs")

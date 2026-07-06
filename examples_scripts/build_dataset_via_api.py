@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Генерация датасета через API (1 сервер). npi generate --input ./pdfs"""
-from npi.config import load_config
-from npi.dataset import PDFParser, TextChunker, DatasetGenerator
+"""Генерация датасета через API (1 сервер). pyruqo1 generate --input ./pdfs"""
+from pyruqo1.config import load_config
+from pyruqo1.dataset import PDFParser, TextChunker, DatasetGenerator
 
 config = load_config(model_name="gigachat-20b")
 parser = PDFParser()

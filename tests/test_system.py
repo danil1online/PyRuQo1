@@ -47,13 +47,13 @@ def test_get_free_disk_gb():
 
 
 def test_check_system_requirements():
-    result = pytest.importorskip("npi.utils.system")
+    result = pytest.importorskip("pyruqo1.utils.system")
     # Just verify the module exists and has expected functions
     assert hasattr(result, "check_system_requirements")
 
 
 def test_swap_functions():
-    from npi.utils.swap import (
+    from pyruqo1.utils.swap import (
         get_free_ram_gb,
         get_free_disk_gb,
         DEFAULT_SWAP_SIZE_GB,
@@ -66,6 +66,6 @@ def test_swap_functions():
 
 
 def test_managed_swap_context_exists():
-    from npi.utils.swap import managed_swap
+    from pyruqo1.utils.swap import managed_swap
     import inspect
     assert inspect.isfunction(managed_swap)

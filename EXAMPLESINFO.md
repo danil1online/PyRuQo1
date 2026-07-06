@@ -673,7 +673,7 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 - [test_gigachat3.log](logs_example/test_gigachat3.log)
 
 ## Acknowledgment
-Roman Zaycev, [SRSPU(NPI)](https://www.npi-tu.ru/).
+Roman Zaycev, [SRSPU(NPI)](https://www.pyruqo1-tu.ru/).
 
 ## License
 Open source projects, [LICENSE](LICENSE).

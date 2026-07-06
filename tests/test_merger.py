@@ -18,14 +18,14 @@ sys.modules['llama_cpp.convert'] = MagicMock()
 
 
 def test_merger_init():
-    from npi.merge.merger import LORAMerger
+    from pyruqo1.merge.merger import LORAMerger
     config = {"model": {"name": "test-model", "trust_remote_code": True}}
     merger = LORAMerger(config)
     assert merger.config == config
 
 
 def test_merger_merge_params():
-    from npi.merge.merger import LORAMerger
+    from pyruqo1.merge.merger import LORAMerger
     config = {
         "model": {"name": "base-model", "trust_remote_code": True},
         "training": {"output_dir": "./lora_output"},
@@ -38,13 +38,13 @@ def test_merger_merge_params():
 
 
 def test_merger_merge_low_ram():
-    from npi.merge.merger import LORAMerger
+    from pyruqo1.merge.merger import LORAMerger
     config = {
         "model": {"name": "base-model", "trust_remote_code": True},
         "merge": {"low_ram": True, "cpu_swap_gb": 30, "max_shard_size": "3GB"},
     }
     merger = LORAMerger(config)
-    with patch("npi.merge.merger.managed_swap"):
+    with patch("pyruqo1.merge.merger.managed_swap"):
         with patch.object(merger, "_save_model"):
             merger._merge_low_ram(
                 "base-model", "./lora", "./merged",
@@ -53,7 +53,7 @@ def test_merger_merge_low_ram():
 
 
 def test_save_model():
-    from npi.merge.merger import LORAMerger
+    from pyruqo1.merge.merger import LORAMerger
     import tempfile
     import os
     config = {"model": {"name": "test", "trust_remote_code": True}}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Генерация математического датасета (Marker + мульти-сервер). npi generate --input ./pdfs --mode math"""
-from npi.dataset import MathParser, MathChunker, DatasetGenerator
+"""Генерация математического датасета (Marker + мульти-сервер). pyruqo1 generate --input ./pdfs --mode math"""
+from pyruqo1.dataset import MathParser, MathChunker, DatasetGenerator
 
 parser = MathParser()
 texts = parser.parse_folder("./university_pdfs")

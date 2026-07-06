@@ -18,7 +18,7 @@ sys.modules['llama_cpp.convert'] = MagicMock()
 
 
 def test_text_chunker_simple():
-    from npi.dataset.chunker import TextChunker
+    from pyruqo1.dataset.chunker import TextChunker
     chunker = TextChunker(chunk_size=100, overlap=10)
     text = " ".join([f"word{i}" for i in range(50)])
     chunks = chunker.chunk(text)
@@ -26,7 +26,7 @@ def test_text_chunker_simple():
 
 
 def test_text_chunker_small():
-    from npi.dataset.chunker import TextChunker
+    from pyruqo1.dataset.chunker import TextChunker
     chunker = TextChunker(chunk_size=1000, overlap=50)
     text = "short text"
     chunks = chunker.chunk(text)
@@ -35,14 +35,14 @@ def test_text_chunker_small():
 
 
 def test_text_chunker_empty():
-    from npi.dataset.chunker import TextChunker
+    from pyruqo1.dataset.chunker import TextChunker
     chunker = TextChunker(chunk_size=100, overlap=10)
     assert chunker.chunk("") == []
     assert chunker.chunk(None) == []
 
 
 def test_math_chunker_no_formulas():
-    from npi.dataset.chunker import MathChunker
+    from pyruqo1.dataset.chunker import MathChunker
     chunker = MathChunker(chunk_size=100, overlap=10)
     text = " ".join([f"word{i}" for i in range(50)])
     chunks = chunker.chunk(text)
@@ -50,7 +50,7 @@ def test_math_chunker_no_formulas():
 
 
 def test_math_chunker_with_formulas():
-    from npi.dataset.chunker import MathChunker
+    from pyruqo1.dataset.chunker import MathChunker
     chunker = MathChunker(chunk_size=500, overlap=50)
     text = "Some text $$\\int_0^1 x^2 dx$$ more text $$\\frac{a}{b}$$ end"
     chunks = chunker.chunk(text)
@@ -58,7 +58,7 @@ def test_math_chunker_with_formulas():
 
 
 def test_text_chunker_overlap():
-    from npi.dataset.chunker import TextChunker
+    from pyruqo1.dataset.chunker import TextChunker
     chunker = TextChunker(chunk_size=20, overlap=10)
     text = "one two three four five six seven eight"
     chunks = chunker.chunk(text)

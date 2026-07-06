@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Генерация датасета (простой вариант). npi generate --input ./pdfs"""
-from npi.dataset import PDFParser, TextChunker, DatasetGenerator
+"""Генерация датасета (простой вариант). pyruqo1 generate --input ./pdfs"""
+from pyruqo1.dataset import PDFParser, TextChunker, DatasetGenerator
 
 parser = PDFParser()
 texts = parser.parse_folder("./university_pdfs")

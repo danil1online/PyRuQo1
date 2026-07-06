@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "npi-reasoning"
+name = "pyruqo1-reasoning"
 version = "0.1.0"
 description = "Conveyor for training Russian reasoning LLMs (GigaChat / GigaChat3 / YandexGPT)"
 readme = "README.md"
@@ -40,10 +40,10 @@ test = [
 ]
 
 [project.scripts]
-npi = "npi.cli:cli"
+pyruqo1 = "pyruqo1.cli:cli"
 
 [tool.setuptools.packages.find]
-include = ["npi*"]
+include = ["pyruqo1*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

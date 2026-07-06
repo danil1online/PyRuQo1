@@ -19,7 +19,7 @@ sys.modules['requests'] = MagicMock()
 
 
 def test_generator_init():
-    from npi.dataset.generator import DatasetGenerator
+    from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
     assert gen.servers == ["http://localhost:8079/v1/chat/completions"]
     assert gen.temperature == 0.3
@@ -27,14 +27,14 @@ def test_generator_init():
 
 
 def test_generator_custom_servers():
-    from npi.dataset.generator import DatasetGenerator
+    from pyruqo1.dataset.generator import DatasetGenerator
     servers = ["http://srv1:8079/v1/chat/completions", "http://srv2:8079/v1/chat/completions"]
     gen = DatasetGenerator(servers=servers)
     assert len(gen.servers) == 2
 
 
 def test_next_server():
-    from npi.dataset.generator import DatasetGenerator
+    from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator(servers=["http://a:8079", "http://b:8079"])
     assert gen._get_next_server() == "http://a:8079"
     assert gen._get_next_server() == "http://b:8079"
@@ -42,17 +42,17 @@ def test_next_server():
 
 
 def test_generate_row_failure():
-    from npi.dataset.generator import DatasetGenerator
+    from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
     result = gen._generate_row("context", "system")
     assert result is None
 
 
 def test_default_system_prompt():
-    from npi.dataset.generator import DatasetGenerator
+    from pyruqo1.dataset.generator import DatasetGenerator
     assert "научный методолог" in DatasetGenerator.DEFAULT_SYSTEM_PROMPT.lower()
 
 
 def test_math_system_prompt():
-    from npi.dataset.generator import DatasetGenerator
+    from pyruqo1.dataset.generator import DatasetGenerator
     assert "LaTeX" in DatasetGenerator.MATH_SYSTEM_PROMPT

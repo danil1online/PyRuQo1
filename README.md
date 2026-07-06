@@ -1,4 +1,4 @@
-# NPI Reasoning — конвейер обучения reasoning-моделей
+# PyRuQo1 — конвейер обучения reasoning-моделей
 
 Обучение российских LLM (GigaChat-20B / GigaChat3-10B / YandexGPT-8B) методом QLoRA на синтетическом датасете с цепочками рассуждений (Chain-of-Thought).
 
@@ -10,42 +10,42 @@ pip install -e ".[test]"        # основной стек
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf,test]"  # + GGUF конвертация
 
 # Проверка системы
-npi check
+pyruqo1 check
 
 # Обучение
-npi train --model gigachat-20b
+pyruqo1 train --model gigachat-20b
 
 # Генерация датасета
-npi generate --input ./pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
+pyruqo1 generate --input ./pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
 
 # Разрезание журналов
-npi split --input ./journals/
+pyruqo1 split --input ./journals/
 
 # Слияние LoRA
-npi merge --model gigachat-20b --manage-swap
+pyruqo1 merge --model gigachat-20b --manage-swap
 
 # Конвертация в GGUF
-npi gguf --model ./merged_model --quant Q4_K_M
+pyruqo1 gguf --model ./merged_model --quant Q4_K_M
 ```
 
 ## CLI
 
 ```
-npi train      # QLoRA-обучение
-npi generate   # генерация датасета из PDF
-npi parse      # парсинг PDF в чанки
-npi split      # разрезание журналов на статьи
-npi mix        # объединение датасетов + split train/val
-npi merge      # слияние LoRA-адаптера
-npi gguf       # конвертация в GGUF
-npi check      # проверка системы
+pyruqo1 train      # QLoRA-обучение
+pyruqo1 generate   # генерация датасета из PDF
+pyruqo1 parse      # парсинг PDF в чанки
+pyruqo1 split      # разрезание журналов на статьи
+pyruqo1 mix        # объединение датасетов + split train/val
+pyruqo1 merge      # слияние LoRA-адаптера
+pyruqo1 gguf       # конвертация в GGUF
+pyruqo1 check      # проверка системы
 ```
 
 ## Python API
 
 ```python
-from npi.config import load_config
-from npi.training import NPITrainer
+from pyruqo1.config import load_config
+from pyruqo1.training import NPITrainer
 
 config = load_config(model_name="gigachat-20b")
 trainer = NPITrainer(config)
@@ -53,7 +53,7 @@ trainer.train()
 ```
 
 ```python
-from npi.dataset import PDFParser, TextChunker, DatasetGenerator
+from pyruqo1.dataset import PDFParser, TextChunker, DatasetGenerator
 
 parser = PDFParser()
 texts = parser.parse_folder("./pdfs")
@@ -68,7 +68,7 @@ generator.generate_from_chunks(chunks, "dataset.json", mode="simple")
 ```
 
 ```python
-from npi.merge import LORAMerger
+from pyruqo1.merge import LORAMerger
 
 config = load_config(model_name="gigachat-20b")
 merger = LORAMerger(config)
@@ -78,7 +78,7 @@ merger.merge(manage_swap=True)
 ## Структура
 
 ```
-npi/                   # основная библиотека
+pyruqo1/                   # основная библиотека
 ├── config/            # YAML-конфиги моделей
 ├── utils/             # логгер, системные утилиты, swap
 ├── dataset/           # парсинг, чанкинг, генерация датасета
@@ -96,7 +96,7 @@ tests/                 # базовые тесты
 
 ## Конфигурация
 
-Встроенные конфиги в `npi/config/`:
+Встроенные конфиги в `pyruqo1/config/`:
 - `gigachat-20b.yaml` — GigaChat-20B-A3B (основной)
 - `gigachat3-10b.yaml` — GigaChat3-10B-A1.8B
 - `ygpt-5-lite-8b.yaml` — YandexGPT-5-Lite-8B
@@ -121,10 +121,10 @@ CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
 
 ```bash
 # Автоматическое управление swap
-npi merge --model gigachat-20b --manage-swap
+pyruqo1 merge --model gigachat-20b --manage-swap
 
 # Ручное управление (Python API)
-from npi.utils.swap import managed_swap
+from pyruqo1.utils.swap import managed_swap
 
 with managed_swap(size_gb=40):
     merger.merge()

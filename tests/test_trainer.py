@@ -19,7 +19,7 @@ sys.modules['requests'] = MagicMock()
 
 
 def test_formatting_functions():
-    from npi.training.formatting import format_single_example, formatting_prompts_func
+    from pyruqo1.training.formatting import format_single_example, formatting_prompts_func
     example = {
         "system": "You are a helper.",
         "prompt": "Hello?",
@@ -33,7 +33,7 @@ def test_formatting_functions():
 
 
 def test_format_dataset():
-    from npi.training.formatting import format_dataset
+    from pyruqo1.training.formatting import format_dataset
     MockDataset = MagicMock()
     MockDataset.column_names = ["system", "prompt", "response"]
     result = format_dataset(MockDataset)
@@ -41,7 +41,7 @@ def test_format_dataset():
 
 
 def test_trainer_init():
-    from npi.training import NPITrainer
+    from pyruqo1.training import NPITrainer
     config = {
         "model": {"name": "test-model", "trust_remote_code": True},
         "lora": {"r": 8, "lora_alpha": 16},
@@ -57,9 +57,9 @@ def test_trainer_init():
 
 def test_build_training_args():
     """Test that SFTConfig is called with correct kwargs."""
-    from npi.training.config import build_training_args
+    from pyruqo1.training.config import build_training_args
 
-    with patch("npi.training.config.SFTConfig") as MockSFTConfig:
+    with patch("pyruqo1.training.config.SFTConfig") as MockSFTConfig:
         mock_instance = MagicMock()
         MockSFTConfig.return_value = mock_instance
 
@@ -88,9 +88,9 @@ def test_build_training_args():
 
 def test_build_training_args_defaults():
     """Test default values when config is empty."""
-    from npi.training.config import build_training_args
+    from pyruqo1.training.config import build_training_args
 
-    with patch("npi.training.config.SFTConfig") as MockSFTConfig:
+    with patch("pyruqo1.training.config.SFTConfig") as MockSFTConfig:
         mock_instance = MagicMock()
         MockSFTConfig.return_value = mock_instance
 
@@ -105,9 +105,9 @@ def test_build_training_args_defaults():
 
 def test_build_training_args_full():
     """Test full configuration."""
-    from npi.training.config import build_training_args
+    from pyruqo1.training.config import build_training_args
 
-    with patch("npi.training.config.SFTConfig") as MockSFTConfig:
+    with patch("pyruqo1.training.config.SFTConfig") as MockSFTConfig:
         mock_instance = MagicMock()
         MockSFTConfig.return_value = mock_instance
 

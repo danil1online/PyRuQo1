@@ -19,7 +19,7 @@ sys.modules['llama_cpp.convert'] = MagicMock()
 
 
 def test_get_logger():
-    from npi.utils.logger import get_logger, progress_bar
+    from pyruqo1.utils.logger import get_logger, progress_bar
     logger = get_logger("test_logger")
     assert logger is not None
     assert logger.name == "test_logger"
@@ -27,26 +27,26 @@ def test_get_logger():
 
 
 def test_get_logger_default():
-    from npi.utils.logger import get_logger
+    from pyruqo1.utils.logger import get_logger
     logger = get_logger()
     assert logger is not None
 
 
 def test_progress_bar():
-    from npi.utils.logger import progress_bar
+    from pyruqo1.utils.logger import progress_bar
     pb = progress_bar(total=10, description="test")
     assert pb is not None
 
 
 def test_config_import():
-    from npi.config import load_config, save_config, deep_merge
+    from pyruqo1.config import load_config, save_config, deep_merge
     assert callable(load_config)
     assert callable(save_config)
     assert callable(deep_merge)
 
 
 def test_deep_merge():
-    from npi.config import deep_merge
+    from pyruqo1.config import deep_merge
     base = {"a": {"b": 1, "c": 2}, "d": 3}
     override = {"a": {"b": 10, "e": 5}, "f": 6}
     result = deep_merge(base, override)
@@ -58,7 +58,7 @@ def test_deep_merge():
 
 
 def test_load_config_with_model():
-    from npi.config import load_config
+    from pyruqo1.config import load_config
     config = load_config(model_name="gigachat-20b")
     assert "model" in config
     assert "training" in config
@@ -67,7 +67,7 @@ def test_load_config_with_model():
 
 
 def test_load_config_with_path(tmp_path):
-    from npi.config import load_config
+    from pyruqo1.config import load_config
     import yaml
     test_config = tmp_path / "test.yaml"
     test_config.write_text(yaml.dump({"model": {"name": "test-model"}, "training": {"output_dir": "/tmp/test"}}))
@@ -76,14 +76,14 @@ def test_load_config_with_path(tmp_path):
 
 
 def test_load_config_defaults():
-    from npi.config import load_config
+    from pyruqo1.config import load_config
     config = load_config()
     assert "model" in config
     assert "training" in config
 
 
 def test_save_config(tmp_path):
-    from npi.config import save_config
+    from pyruqo1.config import save_config
     config = {"model": {"name": "test"}, "training": {"output_dir": "/tmp"}}
     out = tmp_path / "out.yaml"
     save_config(config, str(out))

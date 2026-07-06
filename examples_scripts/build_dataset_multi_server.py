@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Генерация датасета (мульти-сервер). npi generate --input ./pdfs --servers http://srv1:8079/v1/chat/completions http://srv2:8079/v1/chat/completions"""
-from npi.dataset import PDFParser, TextChunker, DatasetGenerator
+"""Генерация датасета (мульти-сервер). pyruqo1 generate --input ./pdfs --servers http://srv1:8079/v1/chat/completions http://srv2:8079/v1/chat/completions"""
+from pyruqo1.dataset import PDFParser, TextChunker, DatasetGenerator
 
 parser = PDFParser()
 texts = parser.parse_folder("./university_pdfs")

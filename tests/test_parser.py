@@ -18,7 +18,7 @@ sys.modules['llama_cpp.convert'] = MagicMock()
 
 
 def test_clean_text():
-    from npi.dataset.parser import PDFParser
+    from pyruqo1.dataset.parser import PDFParser
     parser = PDFParser()
     text = "hello   world"
     result = parser.clean_text(text)
@@ -26,7 +26,7 @@ def test_clean_text():
 
 
 def test_clean_text_hyphens():
-    from npi.dataset.parser import PDFParser
+    from pyruqo1.dataset.parser import PDFParser
     parser = PDFParser()
     text = "nano-\n technology"
     result = parser.clean_text(text)
@@ -34,14 +34,14 @@ def test_clean_text_hyphens():
 
 
 def test_clean_text_empty():
-    from npi.dataset.parser import PDFParser
+    from pyruqo1.dataset.parser import PDFParser
     parser = PDFParser()
     assert parser.clean_text("") == ""
     assert parser.clean_text(None) == ""
 
 
 def test_parse_folder_not_found():
-    from npi.dataset.parser import PDFParser
+    from pyruqo1.dataset.parser import PDFParser
     parser = PDFParser()
     result = parser.parse_folder("/nonexistent/path/xyz")
     assert result == []

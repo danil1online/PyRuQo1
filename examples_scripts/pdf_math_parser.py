@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Парсинг PDF с формулами (Marker). npi parse --input ./pdfs --mode math"""
-from npi.dataset import MathParser, MathChunker
+"""Парсинг PDF с формулами (Marker). pyruqo1 parse --input ./pdfs --mode math"""
+from pyruqo1.dataset import MathParser, MathChunker
 
 parser = MathParser()
 texts = parser.parse_folder("./university_pdfs")
