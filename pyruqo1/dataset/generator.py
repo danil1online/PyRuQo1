@@ -25,7 +25,9 @@ class DatasetGenerator:
     DEFAULT_SYSTEM_PROMPT = (
         "Ты — ведущий научный методолог. Твоя задача — изучить фрагмент статьи, "
         "придумать сложный аналитический вопрос к нему, детально расписать логику "
-        "рассуждения и выдать ответ."
+        "рассуждения и выдать ответ. Ты должен вернуть результат СТРОГО в формате JSON "
+        "со следующими ключами: 'prompt', 'thought', 'response'. "
+        "Все ответы и рассуждения должны быть на русском языке."
     )
 
     MATH_SYSTEM_PROMPT = (
@@ -33,12 +35,14 @@ class DatasetGenerator:
         "с формулами в формате LaTeX. Выбери из текста ключевое математическое уравнение или теоретический вывод. "
         "Сформулируй сложную задачу, требующую доказать, вывести или решить это уравнение. "
         "Сначала выдай сформулированную задачу, а затем напиши подробное итоговое решение. "
-        "Для всех математических символов и формул используй СТРОГИЙ синтаксис LaTeX."
+        "Для всех математических символов и формул используй СТРОГИЙ синтаксис LaTeX. "
+        "Ты должен вернуть результат СТРОГО в формате JSON со следующими ключами: 'prompt', 'thought', 'response'. "
+        "Все ответы и рассуждения должны быть на русском языке."
     )
 
     SYSTEM_TEMPLATE = (
-        "You are an AI assistant. Format your answers as follows: "
-        "<Thought> Your thoughts (understanding, reasoning) </Thought> <output> Your answer </output>"
+        "Вы — ИИ-ассистент. Форматируйте ваши ответы следующим образом: "
+        "<Thought> Ваши размышления (понимание, логика) </Thought> <output> Ваш ответ </output>"
     )
 
     def __init__(
@@ -62,7 +66,7 @@ class DatasetGenerator:
         self._server_index += 1
         return server
 
-    def _parse_response(self, choice: dict) -> Optional[Dict]:
+    def _parse_response(self, choice: dict, chunk: str) -> Optional[Dict]:
         """Извлекает prompt/thought/response из ответа модели.
 
         Работает с reasoning-моделями llama.cpp, которые отдают:
@@ -79,29 +83,33 @@ class DatasetGenerator:
 
         full_response_text = choice.get("content", "").strip()
 
+        # Формируем prompt с фрагментом статьи (как в оригинальных скриптах)
+        prompt_with_context = f"На основе фрагмента статьи решите аналитическую задачу: {chunk[:150]}..."
+
         # Если content пустой (как у Qwen3.6-35B-A3B-UD), используем reasoning_content как ответ
         if not full_response_text and thought_text:
             return {
-                "prompt": "Решите аналитическую задачу на основе текста: ...",
-                "thought": "Анализ предоставленного контекста.",
-                "response": thought_text,
+                "prompt": prompt_with_context,
+                "thought": thought_text,
+                "response": full_response_text,
             }
         elif full_response_text and thought_text:
             return {
-                "prompt": "На основе фрагмента статьи решите аналитическую задачу: ...",
+                "prompt": prompt_with_context,
                 "thought": thought_text,
                 "response": full_response_text,
             }
         elif full_response_text:
             return {
-                "prompt": "Решите аналитическую задачу на основе текста: ...",
+                "prompt": prompt_with_context,
                 "thought": "Анализ предоставленного контекста.",
                 "response": full_response_text,
             }
         return None
 
-    def _query_server(self, server_url: str, chunk: str, system_prompt: str) -> Optional[Dict]:
-        user_prompt = f"Фрагмент научной публикации:\n\"\"\"\n{chunk}\n\"\"\""
+    def _query_server(self, server_url: str, chunk: str, system_prompt: str, user_prompt: str = None) -> Optional[Dict]:
+        if user_prompt is None:
+            user_prompt = f"Фрагмент научной публикации:\n\"\"\"\n{chunk}\n\"\"\""
 
         payload = {
             "messages": [
@@ -123,7 +131,7 @@ class DatasetGenerator:
             if response.status_code == 200:
                 result_json = response.json()
                 choice = result_json["choices"][0]["message"]
-                return self._parse_response(choice)
+                return self._parse_response(choice, chunk)
             else:
                 self.logger.warning(f"Сервер {server_url} вернул код {response.status_code}: {response.text}")
         except Exception as e:
@@ -131,8 +139,8 @@ class DatasetGenerator:
 
         return None
 
-    def _generate_row(self, chunk: str, system_prompt: str) -> Optional[Dict]:
-        llm_data = self._query_server(self._get_next_server(), chunk, system_prompt)
+    def _generate_row(self, chunk: str, system_prompt: str, user_prompt: str = None) -> Optional[Dict]:
+        llm_data = self._query_server(self._get_next_server(), chunk, system_prompt, user_prompt)
 
         if llm_data and all(k in llm_data for k in ["prompt", "thought", "response"]):
             return {
@@ -149,15 +157,20 @@ class DatasetGenerator:
         mode: str = "simple",
     ) -> List[Dict]:
         system_prompt = self.DEFAULT_SYSTEM_PROMPT if mode == "simple" else self.MATH_SYSTEM_PROMPT
+        user_prompt_template = (
+            "Фрагмент научной публикации с LaTeX-формулами:"
+            if mode == "math"
+            else "Фрагмент научной публикации:"
+        )
 
         self.logger.info(f"Генерация: {len(chunks)} чанков, режим={mode}, серверов={len(self.servers)}")
 
         dataset_rows = []
 
         if len(self.servers) > 1:
-            dataset_rows = self._generate_multi_server(chunks, system_prompt, output_file)
+            dataset_rows = self._generate_multi_server(chunks, system_prompt, output_file, user_prompt_template)
         else:
-            dataset_rows = self._generate_single_server(chunks, system_prompt, output_file)
+            dataset_rows = self._generate_single_server(chunks, system_prompt, output_file, user_prompt_template)
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
@@ -165,11 +178,12 @@ class DatasetGenerator:
         self.logger.info(f"Генерация завершена. Сохранено {len(dataset_rows)} строк в {output_file}")
         return dataset_rows
 
-    def _generate_single_server(self, chunks: List[str], system_prompt: str, output_file: str = None) -> List[Dict]:
+    def _generate_single_server(self, chunks: List[str], system_prompt: str, output_file: str = None, user_prompt_template: str = "Фрагмент научной публикации:") -> List[Dict]:
         dataset_rows = []
 
         for i, chunk in enumerate(tqdm(chunks, desc="Генерация (1 сервер)")):
-            row = self._generate_row(chunk, system_prompt)
+            user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\""
+            row = self._generate_row(chunk, system_prompt, user_prompt)
             if row:
                 dataset_rows.append(row)
 
@@ -180,7 +194,7 @@ class DatasetGenerator:
 
         return dataset_rows
 
-    def _generate_multi_server(self, chunks: List[str], system_prompt: str, output_file: str = None) -> List[Dict]:
+    def _generate_multi_server(self, chunks: List[str], system_prompt: str, output_file: str = None, user_prompt_template: str = "Фрагмент научной публикации:") -> List[Dict]:
         dataset_rows = []
         server_queue = Queue()
         for server in self.servers:
@@ -189,7 +203,8 @@ class DatasetGenerator:
         def worker(chunk):
             server = server_queue.get()
             try:
-                return self._query_server(server, chunk, system_prompt)
+                user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\""
+                return self._query_server(server, chunk, system_prompt, user_prompt)
             finally:
                 server_queue.put(server)
 
