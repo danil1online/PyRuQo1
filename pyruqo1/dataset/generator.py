@@ -12,23 +12,28 @@ from pyruqo1.utils.logger import get_logger, progress_bar
 
 
 class DatasetGenerator:
-    """Генерация датасета через API llama.cpp (1 сервер или мульти-сервер)."""
+    """Генерация датасета через API llama.cpp (1 сервер или мульти-сервер).
+
+    Параметры по умолчанию соответствуют настройкам оригинальных скриптов,
+    которые работают с reasoning-моделями (Qwen 35B, o1-LoRA и т.п.):
+    - temperature=0.2 (низкая температура для строгости)
+    - max_tokens=2500 (запас токенов на формулы и рассуждения)
+    - timeout=300 (5 минут на сложный чанк)
+    - response_format УБРАН — ломает reasoning-модели
+    """
 
     DEFAULT_SYSTEM_PROMPT = (
         "Ты — ведущий научный методолог. Твоя задача — изучить фрагмент статьи, "
         "придумать сложный аналитический вопрос к нему, детально расписать логику "
-        "рассуждения и выдать ответ. Ты должен вернуть результат СТРОГО в формате JSON "
-        "со следующими ключами: 'prompt', 'thought', 'response'."
+        "рассуждения и выдать ответ."
     )
 
     MATH_SYSTEM_PROMPT = (
         "Ты — профессор высшей математики и теоретической физики. Перед тобой фрагмент научной статьи "
         "с формулами в формате LaTeX. Выбери из текста ключевое математическое уравнение или теоретический вывод. "
         "Сформулируй сложную задачу, требующую доказать, вывести или решить это уравнение. "
-        "В поле 'thought' пошагово распиши математическую логику решения, промежуточные преобразования и законы. "
-        "В поле 'response' запиши финальный структурированный ответ и конечную формулу. "
-        "И в вопросе, и в рассуждениях, и в ответе используй СТРОГИЙ синтаксис LaTeX для математических символов. "
-        "Выведи результат СТРОГО в формате JSON с ключами: 'prompt', 'thought', 'response'."
+        "Сначала выдай сформулированную задачу, а затем напиши подробное итоговое решение. "
+        "Для всех математических символов и формул используй СТРОГИЙ синтаксис LaTeX."
     )
 
     SYSTEM_TEMPLATE = (
@@ -39,10 +44,10 @@ class DatasetGenerator:
     def __init__(
         self,
         servers: List[str] = None,
-        temperature: float = 0.3,
-        max_tokens: int = 1500,
-        save_interval: int = 10,
-        timeout: int = 120,
+        temperature: float = 0.2,
+        max_tokens: int = 2500,
+        save_interval: int = 20,
+        timeout: int = 300,
     ):
         self.servers = servers or ["http://localhost:8079/v1/chat/completions"]
         self.temperature = temperature
@@ -57,6 +62,35 @@ class DatasetGenerator:
         self._server_index += 1
         return server
 
+    def _parse_response(self, choice: dict) -> Optional[Dict]:
+        """Извлекает prompt/thought/response из ответа модели.
+
+        Работает с reasoning-моделями, которые отдают:
+        - reasoning_content — нативные мысли модели (llama.cpp)
+        - content — финальный текстовый ответ
+        """
+        full_response_text = choice.get("content", "").strip()
+
+        thought_text = choice.get("reasoning_content", "").strip()
+
+        # Страховка: если сервер отдал мысли в другом поле
+        if not thought_text:
+            thought_text = choice.get("data", {}).get("reasoning_content", "").strip()
+
+        if full_response_text and thought_text:
+            return {
+                "prompt": f"На основе фрагмента статьи решите аналитическую задачу: ...",
+                "thought": thought_text,
+                "response": full_response_text,
+            }
+        elif full_response_text:
+            return {
+                "prompt": f"Решите аналитическую задачу на основе текста: ...",
+                "thought": "Анализ предоставленного контекста.",
+                "response": full_response_text,
+            }
+        return None
+
     def _query_server(self, server_url: str, chunk: str, system_prompt: str) -> Optional[Dict]:
         user_prompt = f"Фрагмент научной публикации:\n\"\"\"\n{chunk}\n\"\"\""
 
@@ -67,7 +101,7 @@ class DatasetGenerator:
             ],
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "response_format": {"type": "json_object"},
+            # response_format УБРАН — он ломает reasoning-модели
         }
 
         try:
@@ -79,10 +113,10 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                content_str = result_json["choices"][0]["message"]["content"]
-                return json.loads(content_str)
+                choice = result_json["choices"][0]["message"]
+                return self._parse_response(choice)
             else:
-                self.logger.warning(f"Сервер {server_url} вернул код {response.status_code}")
+                self.logger.warning(f"Сервер {server_url} вернул код {response.status_code}: {response.text}")
         except Exception as e:
             self.logger.warning(f"Ошибка запроса к {server_url}: {e}")
 
@@ -124,7 +158,6 @@ class DatasetGenerator:
 
     def _generate_single_server(self, chunks: List[str], system_prompt: str) -> List[Dict]:
         dataset_rows = []
-        output_file = None
 
         for i, chunk in enumerate(tqdm(chunks, desc="Генерация (1 сервер)")):
             row = self._generate_row(chunk, system_prompt)
@@ -132,8 +165,9 @@ class DatasetGenerator:
                 dataset_rows.append(row)
 
             if len(dataset_rows) % self.save_interval == 0:
-                output_file = dataset_rows[-self.save_interval:] if len(dataset_rows) >= self.save_interval else dataset_rows
-                # save partial is handled in generate_from_chunks
+                # Автосохранение каждые save_interval строк
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
 
         return dataset_rows
 
@@ -164,6 +198,10 @@ class DatasetGenerator:
                             "response": f"<Thought>\n{llm_data['thought']}\n</Thought>\n<output>\n{llm_data['response']}\n</output>",
                         }
                         dataset_rows.append(row)
+
+                        if len(dataset_rows) % self.save_interval == 0:
+                            with open(output_file, "w", encoding="utf-8") as f:
+                                json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
                 except Exception as e:
                     self.logger.warning(f"Ошибка обработки чанка: {e}")
 

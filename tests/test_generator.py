@@ -22,8 +22,8 @@ def test_generator_init():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
     assert gen.servers == ["http://localhost:8079/v1/chat/completions"]
-    assert gen.temperature == 0.3
-    assert gen.max_tokens == 1500
+    assert gen.temperature == 0.2
+    assert gen.max_tokens == 2500
 
 
 def test_generator_custom_servers():
