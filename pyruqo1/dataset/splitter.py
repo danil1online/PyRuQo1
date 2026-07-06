@@ -7,9 +7,16 @@ from tqdm import tqdm
 
 from pyruqo1.utils.logger import get_logger
 
+# Жесткий лимит страниц: если маркеры не сработали, режем по столько страниц
+FORCE_PAGES_PER_ARTICLE = 4
+
 
 class JournalSplitter:
-    """Разрезание сборников журналов на отдельные статьи по УДК/Аннотациям."""
+    """Разрезание сборников журналов на отдельные статьи по УДК/Аннотациям.
+
+    Если маркеры не нашли границ (≤1 статья) и страниц >8, включается fallback
+    — принудительная нарезка по FORCE_PAGES_PER_ARTICLE страниц.
+    """
 
     ARTICLE_START_PATTERNS = [
         re.compile(r'УДК\s+\d+[.\d\s]*', re.IGNORECASE),
@@ -24,9 +31,11 @@ class JournalSplitter:
         self,
         output_dir: str = "./university_pdfs",
         patterns: List[re.Pattern] = None,
+        force_pages_per_article: int = FORCE_PAGES_PER_ARTICLE,
     ):
         self.output_dir = Path(output_dir)
         self.patterns = patterns or self.ARTICLE_START_PATTERNS
+        self.force_pages = force_pages_per_article
         self.logger = get_logger()
 
     def _is_article_start(self, text: str) -> bool:
@@ -45,50 +54,79 @@ class JournalSplitter:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         doc = fitz.open(str(input_path))
-        articles = []
-        current_article_pages = []
-        current_article_start_page = 0
+        total_pages = len(doc)
+        base_name = input_path.stem
 
-        for page_num in range(len(doc)):
+        self.logger.info(f"Сканирование структуры журнала: {base_name} (Всего страниц: {total_pages})")
+
+        # Шаг 1: Поиск маркеров начала новой статьи
+        article_start_pages = [0]  # Первая страница — всегда старт
+
+        for page_num in range(1, total_pages):
             page = doc[page_num]
-            text = page.get_text("text")
+            text = page.get_text("text").strip()
 
-            if page_num == 0:
-                current_article_start_page = 0
-                current_article_pages = [page_num]
-            elif self._is_article_start(text) and len(current_article_pages) > 1:
-                articles.append((current_article_start_page, page_num - 1))
-                current_article_start_page = page_num
-                current_article_pages = [page_num]
-            else:
-                current_article_pages.append(page_num)
-
-        if current_article_pages:
-            articles.append((current_article_start_page, current_article_pages[-1]))
-
-        doc.close()
-
-        self.logger.info(f"Найдено {len(articles)} статей в {input_path.name}")
-
-        output_files = []
-        for i, (start, end) in enumerate(articles):
-            if end - start < 0:
+            if not text:
                 continue
-            article_doc = fitz.open(str(input_path))
+
+            header_area = text[:800]
+
+            has_udk = re.search(r'\bУДК\b', header_area)
+            has_annotation = re.search(
+                r'\b(Аннотация|Abstract|Ключевые слова|Keywords|Введение|Introduction)\b',
+                header_area, re.IGNORECASE
+            )
+            has_copyright = re.search(r'©\s+\d{4}', header_area)
+
+            if (has_udk or has_annotation or has_copyright):
+                if page_num - article_start_pages[-1] >= 2:
+                    article_start_pages.append(page_num)
+
+        if article_start_pages[-1] != total_pages:
+            article_start_pages.append(total_pages)
+
+        actual_articles_found = len(article_start_pages) - 1
+        self.logger.info(f"Найдено по текстовым маркерам: {actual_articles_found}")
+
+        # АВТОМАТИЧЕСКАЯ ЗАЩИТА: Если маркеры нашли всего 1 кусок (сборник не разделился)
+        if actual_articles_found <= 1 and total_pages > 8:
+            self.logger.warning(
+                f"Сборник не разделился стандартным путем. "
+                f"Включается принудительное дробление по {self.force_pages} страницы..."
+            )
+            article_start_pages = list(range(0, total_pages, self.force_pages))
+            if article_start_pages[-1] != total_pages:
+                article_start_pages.append(total_pages)
+
+        is_force = actual_articles_found <= 1
+
+        # Шаг 2: Нарезка и сохранение мини-PDF файлов
+        saved_count = 0
+        for i in range(len(article_start_pages) - 1):
+            start_page = article_start_pages[i]
+            end_page = article_start_pages[i + 1]
+
+            # Пропускаем «огрызки» менее 2 страниц, только если это не режим жесткой нарезки
+            if (end_page - start_page) < 2 and not is_force:
+                continue
+
             new_doc = fitz.open()
+            new_doc.insert_pdf(doc, from_page=start_page, to_page=end_page - 1)
 
-            for page_num in range(start, end + 1):
-                new_doc.insert_pdf(article_doc, from_page=page_num, to_page=page_num)
+            # Формируем имя: добавляем пометку "force", если сработал защитный алгоритм
+            is_force_prefix = "force_" if is_force else ""
+            article_filename = f"{base_name}_{is_force_prefix}article_{saved_count + 1:03d}.pdf"
+            output_file = output_dir / article_filename
 
-            article_name = f"{input_path.stem}_article_{i+1:03d}.pdf"
-            output_file = output_dir / article_name
             new_doc.save(str(output_file))
             new_doc.close()
-            article_doc.close()
-            output_files.append(str(output_file))
+            saved_count += 1
 
-        self.logger.info(f"Сохранено {len(output_files)} статей в {output_dir}")
-        return output_files
+        doc.close()
+        self.logger.info(f"Успешно сохранено изолированных файлов: {saved_count}")
+        self.logger.info(f"Сохранено в: {output_dir}")
+
+        return [str(output_dir / f) for f in sorted(output_dir.glob("*.pdf"))]
 
     def split_folder(self, folder_path: str) -> List[str]:
         folder = Path(folder_path)
