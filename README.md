@@ -41,7 +41,7 @@ pyruqo1 generate --input ./university_pdfs --mode simple --servers http://localh
 
 **Математические текты (LaTeX-формулы, несколько серверов):**
 ```bash
-pyruqo1 generate --input ./math_pdfs --mode math --servers http://localhost:8079/v1/chat/completions http://192.168.2.52:8181/v1/chat/completions
+pyruqo1 generate --input ./math_pdfs --mode math --servers 'http://localhost:8079/v1/chat/completions,http://192.168.2.52:8181/v1/chat/completions'
 ```
 
 Серверы задаются двумя способами:

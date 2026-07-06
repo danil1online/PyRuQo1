@@ -101,7 +101,7 @@ def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable
 
     Примеры:
       pyruqo1 generate --input ./pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
-      pyruqo1 generate --input ./pdfs --mode math --servers http://srv1:8079 http://srv2:8079
+      pyruqo1 generate --input ./pdfs --mode math --servers 'http://srv1:8079,http://srv2:8079'
       pyruqo1 generate --input ./pdfs --mode simple --servers 'http://srv1:8079,http://srv2:8079'
     """
     if not output_file:
