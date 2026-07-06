@@ -7,15 +7,6 @@ from tqdm import tqdm
 from pyruqo1.utils.logger import get_logger
 
 
-def _ensure_marker_weights(weights_dir: str = None):
-    try:
-        from marker.models import load_model
-    except ImportError:
-        raise ImportError(
-            "marker-pdf не установлен. Установите: pip install marker-pdf"
-        )
-
-
 class MathParser:
     """Парсинг PDF с извлечением LaTeX-формул через Marker."""
 
@@ -23,48 +14,49 @@ class MathParser:
         self,
         chunk_size: int = 3500,
         overlap: int = 500,
-        min_text_length: int = 200,
-        marker_model_name: str = "pythia-0.1b",
+        min_text_length: int = 300,
     ):
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.min_text_length = min_text_length
-        self.marker_model_name = marker_model_name
         self.logger = get_logger()
-        _ensure_marker_weights()
+        self._model_lst = None
+
+    def _get_models(self):
+        """Ленивая загрузка моделей Marker (выполняется 1 раз)."""
+        if self._model_lst is not None:
+            return self._model_lst
+
+        try:
+            from marker.models import load_models
+        except ImportError:
+            raise ImportError(
+                "marker-pdf не установлен. Установите: pip install marker-pdf"
+            )
+
+        self.logger.info("Marker: загрузка нейросетей распознавания математического текста...")
+        self._model_lst = load_models()
+        self.logger.info("Marker: модели загружены.")
+        return self._model_lst
 
     def _parse_pdf_with_marker(self, file_path: str) -> Optional[str]:
         try:
             from marker.convert import convert_single_pdf
-            from marker.models import (
-                load_model,
-                load_tokenizer,
-                load_detector,
-                load_segmenter,
-                load_math_translator,
-            )
 
-            self.logger.info(f"Marker: загрузка модели ({self.marker_model_name})...")
-            converter_cls = None
-            try:
-                from marker.convert import Converter
-                converter_cls = Converter
-            except ImportError:
-                pass
+            model_lst = self._get_models()
 
-            if converter_cls:
-                renderer = converter_cls(
-                    load_model,
-                    load_tokenizer,
-                    load_detector,
-                    load_segmenter,
-                    load_math_translator,
-                )
-                full_text, _, _ = renderer(file_path)
-            else:
-                full_text, _, _ = convert_single_pdf(file_path, load_model(self.marker_model_name))
+            full_text, _, _ = convert_single_pdf(file_path, model_lst)
 
-            return full_text if full_text and len(full_text.strip()) >= self.min_text_length else None
+            # Отсекаем список литературы
+            lit_pattern = r'\b(Список литературы|References|Список источников)\b'
+            if re.search(lit_pattern, full_text, re.IGNORECASE):
+                full_text = re.split(lit_pattern, full_text, flags=re.IGNORECASE)[0]
+
+            full_text = full_text.strip()
+
+            if full_text and len(full_text) >= self.min_text_length:
+                return full_text
+            return None
 
         except Exception as e:
             self.logger.error(f"Ошибка Marker {file_path}: {e}")
@@ -95,3 +87,5 @@ class MathParser:
 
         self.logger.info(f"Marker: извлечено текста из {len(all_text)} файлов.")
         return all_text
+
+
