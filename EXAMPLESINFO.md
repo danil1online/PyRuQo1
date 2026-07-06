@@ -60,7 +60,7 @@
 ### Если не интересен процесс разработки, можно сразу переходить к [порядку запуска / описанию эксперимента](#итоговый-порядок-запуска-а-также-минимальные-технические-требования)
 
 ## Повтор [базового решения](https://huggingface.co/evilfreelancer/o1_gigachat-20b-a3b_lora) 
-Программа, повторяющая данное обучение предствалена в [репозитории](scripts/basic_example.py). Скрипт использует готовый датасет, размещенный на huggingface, и оптимизирован под жесткий лимит в 24 ГБ VRAM (RTX 3090): в нём активированы 4-битное квантование базы, сохранение контрольных точек градиентов (gradient_checkpointing) и страничный оптимизатор, который убережет карту от ошибки Out of Memory.
+Программа, повторяющая данное обучение представлена в [репозитории](examples_scripts/basic_example.py). Скрипт использует готовый датасет, размещенный на huggingface, и оптимизирован под жесткий лимит в 24 ГБ VRAM (RTX 3090): в нём активированы 4-битное квантование базы, сохранение контрольных точек градиентов (gradient_checkpointing) и страничный оптимизатор, который убережет карту от ошибки Out of Memory.
 
 Порядок запуска "базового скрипта":
 ```bash
@@ -68,13 +68,13 @@ git clone http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
 cd o1_gigachat-20b-a3b_lora_npi
 python3.10 -m venv env
 source env/bin/activate
-pip install -r requirements.txt
-python scripts/basic_example.py
+pip install -r examples_scripts/requirements.txt
+python examples_scripts/basic_example.py
 ```
 
 **Если скрипт падает с ошибкой Out of Memory**. Если в процессе обучения видеокарта всё же переполняется, уменьшите max_seq_length до 1024 в блоке SFTTrainer. Длина контекста сильнее всего влияет на потребление VRAM при обучении.
 
-**Как адаптировать под университетские публикации**. Когда будет сформирован собственный датасет из статей (например, с помощью o1), структура JSON файла должна соответствовать функции [formatting_prompts_func](scripts/basic_example.py#L34). Для загрузки локального JSON-файла [вместо Hugging Face](scripts/basic_example.py#L29) нужно указать:
+**Как адаптировать под университетские публикации**. Когда будет сформирован собственный датасет из статей (например, с помощью o1), структура JSON файла должна соответствовать функции [formatting_prompts_func](examples_scripts/basic_example.py#L34). Для загрузки локального JSON-файла [вместо Hugging Face](examples_scripts/basic_example.py#L29) нужно указать:
 
 ```python
 dataset = load_dataset("json", data_files="your_university_dataset.json", split="train")
@@ -101,7 +101,7 @@ dataset = load_dataset("json", data_files="your_university_dataset.json", split=
 
 ### Модуль предварительного разделения журналов
 
-[Cкрипт](scripts/split_journal.py) добавлен в репозиторий. Его нужно запускать один раз перед генерацией датасета. Он возьмет файлы из папки со сборниками `./raw_journals`, найдет границы статей по кодам УДК/Аннотациям, аккуратно разрежет их по статьям и сложит в папку `./university_pdfs`, которую уже без проблем обработает основной скрипт обработки статей (превращения в json-датасет).
+[Cкрипт](examples_scripts/split_journal.py) добавлен в репозиторий. Его нужно запускать один раз перед генерацией датасета. Он возьмет файлы из папки со сборниками `./raw_journals`, найдет границы статей по кодам УДК/Аннотациям, аккуратно разрежет их по статьям и сложит в папку `./university_pdfs`, которую уже без проблем обработает основной скрипт обработки статей (превращения в json-датасет).
 
 Этот подход гарантирует, что на вход модели для генерации датасета пойдут чистые, тематически однородные научные работы. Модель не будет отвлекаться на мусорные страницы оглавлений, а качество сгенерированных математических задач вырастет многократно.
 
@@ -122,7 +122,7 @@ dataset = load_dataset("json", data_files="your_university_dataset.json", split=
 
 Для работы с «кучей PDF» на Ubuntu 22.04 лучше всего использовать библиотеку [PyMuPDF (fitz)](https://github.com/pymupdf/pymupdf). Она работает в разы быстрее, чем устоявшийся [PyPDF2](https://pypi.org/project/PyPDF2/), корректно склеивает переносы строк и извлекает текст из многоколоночных академических версток без превращения их в кашу. 
 
-В репозитории [представлен Python-модуль](scripts/pdf_parser.py), который автоматически обходимо все папки с вашими распознанными PDF-файлами, очистит текст от специфического «мусора» (колонтитулы, списки литературы, метаданные) и нарежет его на аккуратные смысловые чанки. Данный скрипт "парсинга и чанкинга" [pdf_parser.py](scripts/pdf_parser.py) берет PDF-файлы, склеивает разорванные из-за переносов слова (например, нано- \n технологии превращает в нанотехнологии) и режет текст с «нахлестом» (overlap), чтобы логическая мысль на стыке страниц не разрывалась.
+В репозитории [представлен Python-модуль](examples_scripts/pdf_parser.py), который автоматически обходимо все папки с вашими распознанными PDF-файлами, очистит текст от специфического «мусора» (колонтитулы, списки литературы, метаданные) и нарежет его на аккуратные смысловые чанки. Данный скрипт "парсинга и чанкинга" [pdf_parser.py](examples_scripts/pdf_parser.py) берет PDF-файлы, склеивает разорванные из-за переносов слова (например, нано- \n технологии превращает в нанотехнологии) и режет текст с «нахлестом» (overlap), чтобы логическая мысль на стыке страниц не разрывалась.
 
 **Примечание по «сканам»** Если среди n-летних архивов есть сканированные копии документов (внутри PDF лежат просто картинки без текстового слоя), скрипт pymupdf пропустит их (выдаст размер текста < 200 символов). Если таких файлов много, их придется предварительно пропустить через систему оптического распознавания текста (OCR). На Ubuntu это можно сделать утилитой `ocrmypdf` или `tesseract-ocr-rus`, которая перезапишет PDF, добавив в них текстовый слой поверх картинок:
 
@@ -131,11 +131,11 @@ sudo apt update && sudo apt install ocrmypdf tesseract-ocr-rus -y
 ocrmypdf input_scanned.pdf output_searchable.pdf -l rus
 ```
 
-Прототип Python-скрипта для сборки датасета -- [build_university_dataset.py](scripts/build_university_dataset.py)
+Прототип Python-скрипта для сборки датасета -- [build_university_dataset.py](examples_scripts/build_university_dataset.py)
 
 **Пояснение как скорректировать под это базовй скрипт обучения**
 
-Поскольку мы уже на этапе сборки датасета зашили теги `<Thought>` и `<output>` внутрь поля response (как это сделано в оригинальном датасете), [функция форматирования в базовом скрипте обучения](scripts/basic_example.py#L34) станет еще проще. Не нужно будет вручную собирать строки из кусочков, достаточно будет просто прочитать готовые поля:
+Поскольку мы уже на этапе сборки датасета зашили теги `<Thought>` и `<output>` внутрь поля response (как это сделано в оригинальном датасете), [функция форматирования в базовом скрипте обучения](examples_scripts/basic_example.py#L34) станет еще проще. Не нужно будет вручную собирать строки из кусочков, достаточно будет просто прочитать готовые поля:
 ```python
 # Новая функция форматирования для SFTTrainer под ваш готовый JSON:
 def formatting_prompts_func(examples):
@@ -160,7 +160,7 @@ def formatting_prompts_func(examples):
 
 ### Скрипт сборки датасета с использованием одной внешней модели
 
-Предполагается, что уже выполнен инференс модели для генерации (o1) через REST API сервера llama.cpp (совместимого со стандартным API OpenAI) и у нас есть срипт парсинга и чанкинга. Это позволяет полностью автоматизировать и распараллелить процесс генерации данных. Поскольку инференс o1-модели вынесен на сетевой адрес, скрипт сборки датасета не будет тратить ресурсы локального процессора на генерацию, а займется исключительно парсингом PDF и логистикой данных. В [файле](scripts/build_dataset_via_api.py) представлен рабочий скрипт, который объединяет в себе:
+Предполагается, что уже выполнен инференс модели для генерации (o1) через REST API сервера llama.cpp (совместимого со стандартным API OpenAI) и у нас есть срипт парсинга и чанкинга. Это позволяет полностью автоматизировать и распараллелить процесс генерации данных. Поскольку инференс o1-модели вынесен на сетевой адрес, скрипт сборки датасета не будет тратить ресурсы локального процессора на генерацию, а займется исключительно парсингом PDF и логистикой данных. В [файле](examples_scripts/build_dataset_via_api.py) представлен рабочий скрипт, который объединяет в себе:
 
 - Рекурсивный обход папок и парсинг PDF (с обработкой сканов через OCR, если текстовый слой пуст).
 - Сетевые асинхронные запросы к модели по адресу http://192.168.2.52:8079/v1/chat/completions.
@@ -174,7 +174,7 @@ def formatting_prompts_func(examples):
 
 Если есть огромный архив публикаций (например, более 10 000 чанков), генерация в один поток через цикл может занять много времени. Можно переписать блок генерации на многопоточность (библиотека concurrent.futures), но это целесообразно, если llama.cpp сервер мощный. 
 
-Предположим вместо этого наличие второго независимого llama.cpp сервера. Серверы работают автономно друг от друга, их мощности можно объединить без риска перегрузить какой-то один из них. Для этого применяется классический паттерн балансировки нагрузки (Load Balancing) на стороне клиента. Ваш локальный ПК будет распределять чанки из очереди по двум серверам параллельно. Это сократит общее время сборки датасета ровно в 2 раза. В файле [build_dataset_multi_server.py](scripts/build_dataset_multi_server.py) представлена обновленная, многопоточная версия модуля генерации. Она использует пул потоков (ThreadPoolExecutor), распределяет задачи по пулу доступных URL и автоматически подменяет упавший или зависший сервер, если с ним пропадет связь.
+Предположим вместо этого наличие второго независимого llama.cpp сервера. Серверы работают автономно друг от друга, их мощности можно объединить без риска перегрузить какой-то один из них. Для этого применяется классический паттерн балансировки нагрузки (Load Balancing) на стороне клиента. Ваш локальный ПК будет распределять чанки из очереди по двум серверам параллельно. Это сократит общее время сборки датасета ровно в 2 раза. В файле [build_dataset_multi_server.py](examples_scripts/build_dataset_multi_server.py) представлена обновленная, многопоточная версия модуля генерации. Она использует пул потоков (ThreadPoolExecutor), распределяет задачи по пулу доступных URL и автоматически подменяет упавший или зависший сервер, если с ним пропадет связь.
 
 Главные преимущества такой архитектуры:
 - Строго по одному запросу на сервер: Структура queue.Queue() и ограничение max_workers=len(SERVERS_POOL) гарантируют, что на каждый сервер в один момент времени идет ровно один запрос. Слабые сервера будут защищены от переполнения VRAM.
@@ -202,12 +202,12 @@ def formatting_prompts_func(examples):
 **Переустановка зависимостей на Ubuntu**
 Для работы нейросетевого парсера формул нужно установить библиотеку marker-pdf. Она автоматически скачает нужные веса распознавания от Hugging Face и задействует видеокарту RTX 3090 (в этот момент она как раз свободна, так как обучение еще не началось).
 
-**[Новый продвинутый парсер формул](scripts/pdf_math_parser.py)**
+**[Новый продвинутый парсер формул](examples_scripts/pdf_math_parser.py)**
 
 Заменяет собой все старые функции извлечения, очистки текста и нарезки.
 
-**Изменение системного промпта в [build_dataset_multi_server.py](scripts/build_dataset_multi_server.py#L90)**
-Поскольку теперь модель o1_gigachat на удаленных серверах будет получать чистый LaTeX-код, нам нужно кардинально изменить задачу в функции [worker_query_api](scripts/build_dataset_multi_server.py#L90). Нужно заменить переменную system_prompt внутри скрипта генерации:
+**Изменение системного промпта в [build_dataset_multi_server.py](examples_scripts/build_dataset_multi_server.py#L90)**
+Поскольку теперь модель o1_gigachat на удаленных серверах будет получать чистый LaTeX-код, нам нужно кардинально изменить задачу в функции [worker_query_api](examples_scripts/build_dataset_multi_server.py#L90). Нужно заменить переменную system_prompt внутри скрипта генерации:
 ```python
 system_prompt = (
         "Ты — профессор высшей математики и теоретической физики. Перед тобой фрагмент научной статьи "
@@ -220,7 +220,7 @@ system_prompt = (
     )
 
 ```
-**Новый вариант файла, включая работу с [парсером формул](scripts/pdf_math_parser.py) -- [build_dataset_multi_server_math.py](scripts/build_dataset_multi_server_math.py)**
+**Новый вариант файла, включая работу с [парсером формул](examples_scripts/pdf_math_parser.py) -- [build_dataset_multi_server_math.py](examples_scripts/build_dataset_multi_server_math.py)**
 
 **Как теперь запустить этот этап**
 
@@ -228,7 +228,7 @@ system_prompt = (
 2. Положите несколько математических или физических PDF-статей в папку university_pdfs (скрипт создаст её при первом запуске, если её не было).
 3. Запустите скрипт через nohup, чтобы процесс не прервался при закрытии терминала:
 ```bash
-nohup python3 -u scripts/build_dataset_multi_server_math.py > dataset_math.log 2>&1 &
+nohup python3 -u examples_scripts/build_dataset_multi_server_math.py > dataset_math.log 2>&1 &
 ```
 4. Следите за ходом извлечения формул и отправки на сервера одной командой:
 ```bash
@@ -245,9 +245,9 @@ tail -f dataset_math.log
 
 1. Пропускаем гуманитарные статьи через парсер fitz и сгенерируйте первую часть JSON-файла.
 2. Пропустите физико-математические статьи через парсер Marker и генерируем вторую часть JSON-файла с LaTeX.
-3. Объединяем оба JSON-файла в один большой датасет перед запуском train_qlora_gigachat_big_dataset.py. Для этого используем [микро-скрипт](scripts/mix_datasets.py). На выходе сформируется единый файл `university_text_dataset.json`, полностью готовый для передачи в вариант train_qlora_gigachat_big_dataset.py, [работающий без validation](scripts/train_qlora_gigachat_big_dataset.py#L35). Запуск этого скрипта:
+3. Объединяем оба JSON-файла в один большой датасет перед запуском train_qlora_gigachat_big_dataset.py. Для этого используем [микро-скрипт](examples_scripts/mix_datasets.py). На выходе сформируется единый файл `university_text_dataset.json`, полностью готовый для передачи в вариант train_qlora_gigachat_big_dataset.py, [работающий без validation](examples_scripts/train_qlora_gigachat_big_dataset.py#L35). Запуск этого скрипта:
 ```bash
-python3 scripts/mix_datasets.py
+python3 examples_scripts/mix_datasets.py
 ```
 
 При таком подходе модель GigaChat-20B будет в рамках одного батча видеть и обычный академический текст, и сложные формулы. Это позволит ей сбалансированно развить оба навыка — общую эрудицию и точные вычисления, не забывая ни один из них.
@@ -260,14 +260,14 @@ python3 scripts/mix_datasets.py
 
 Выделять отдельный кусок под test на этапе обучения не обязательно, лучше создать отдельный независимый скрипт тестирования test_gguf_math.py, который вы запустите вручную в самом конце конвейера.
 
-Лучше всего не усложнять скрипты генерации, которые и так выполняют тяжелую сетевую работу, а добавить логику разделения прямо в скрипт смешивания датасетов [mix_datasets.py](scripts/mix_datasets_.py).
+Лучше всего не усложнять скрипты генерации, которые и так выполняют тяжелую сетевую работу, а добавить логику разделения прямо в скрипт смешивания датасетов [mix_datasets.py](examples_scripts/mix_datasets_.py).
 
 Ниже представлена обновленная версия этого скрипта. Он автоматически делит данные в классической пропорции 90% на обучение (Train) и 10% на валидацию (Validation) и сохраняет два отдельных файла.
 
-[Обновленный скрипт смешивания и разбиения](scripts/mix_datasets_train_val.py)
+[Обновленный скрипт смешивания и разбиения](examples_scripts/mix_datasets_train_val.py)
 
 Теперь, когда у вас есть два файла, загрузку данных и параметры SFTTrainer нужно сделать так, что модель видела оба сегмента.
-Реализуем [блок загрузки данных в вашем скрипте обучения](scripts/train_qlora_gigachat_big_dataset.py#L29):
+Реализуем [блок загрузки данных в вашем скрипте обучения](examples_scripts/train_qlora_gigachat_big_dataset.py#L29):
 ```python
 # Указываем словарь из двух локальных файлов
 data_files = {
@@ -279,7 +279,7 @@ data_files = {
 dataset = load_dataset("json", data_files=data_files)
 print(f"Загружен train: {len(dataset['train'])} строк, validation: {len(dataset['validation'])} строк.")
 ```
-А в блоке настроек [SFTConfig](scripts/train_qlora_gigachat_big_dataset.py#L120) добавляем параметры для автоматического подсчета ошибки валидации:
+А в блоке настроек [SFTConfig](examples_scripts/train_qlora_gigachat_big_dataset.py#L120) добавляем параметры для автоматического подсчета ошибки валидации:
 ```python
 training_args = SFTConfig(
     # ... ваши старые параметры (batch_size, bf16=True и т.д.) ...
@@ -290,7 +290,7 @@ training_args = SFTConfig(
     do_eval=True,                      # Включить режим оценки
 )
 ```
-И передайте валидационный сплит в сам [SFTTrainer](scripts/train_qlora_gigachat_big_dataset.py#L151):
+И передайте валидационный сплит в сам [SFTTrainer](examples_scripts/train_qlora_gigachat_big_dataset.py#L151):
 ```python
 trainer = SFTTrainer(
     model=model,
@@ -302,11 +302,11 @@ trainer = SFTTrainer(
 ```
 Во время обучения в консоли рядом со значением Loss (ошибка на обучающих данных) начнет появляться колонка Validation Loss (ошибка на данных, которые модель не видит при оптимизации весов). **Пока оба значения плавно падают вниз — модель успешно учится выводить формулы. Если Loss падает, а Validation Loss пополз вверх — началось переобучение (модель зазубривает ваш датасет), и процесс тренировки можно останавливать.**
 
-После этого можно смело запускать второй шаг вашей инструкции — `python3 scripts/train_qlora_gigachat_big_dataset.py`. 
+После этого можно смело запускать второй шаг вашей инструкции — `python3 examples_scripts/train_qlora_gigachat_big_dataset.py`. 
 
 ## Скрипт обучения на собственном датасете и объединение моделей
 
-Скрипт обучения `python3 scripts/train_qlora_gigachat_big_dataset.py` сохранит только маленькие веса адаптера (~100-200 МБ). Чтобы использовать модель полноценно (например, конвертировать её в GGUF для инференса), потребуется запустить [скрипт слияния (Merge)](scripts/merge_lora_example.py) базовой модели GigaChat-20B и сохраненного адаптера. 
+Скрипт обучения `python3 examples_scripts/train_qlora_gigachat_big_dataset.py` сохранит только маленькие веса адаптера (~100-200 МБ). Чтобы использовать модель полноценно (например, конвертировать её в GGUF для инференса), потребуется запустить [скрипт слияния (Merge)](examples_scripts/merge_lora_example.py) базовой модели GigaChat-20B и сохраненного адаптера. 
 
 Cлияние (Merge) нужно делать строго до финального квантования в GGUF (если такое планируется). Инструменты конвертации (такие как llama.cpp) не умеют напрямую склеивать 4-битные квантованные файлы GGUF с отдельными LoRA-адаптерами.
 
@@ -320,12 +320,12 @@ Cлияние (Merge) нужно делать строго до финально
 Поскольку базовая модель GigaChat-20B-A3B в формате FP16 весит около 40 ГБ, она не поместится целиком в видеокарту RTX 3090 (24 ГБ) во время слияния. Однако если есть **256 ГБ** системной RAM и мощный процессор, то следующий скрипт задействует оперативную память (CPU) для выполнения этой операции, вообще не перегружая видеокарту.
 
 ```bash
-python scripts/merge_lora_example.py
+python examples_scripts/merge_lora_example.py
 ```
 
 Предположим, такого ПК нет. Есть **64 ГБ** оперативной памяти. Это абсолютный технологический минимум, но его хватит для слияния модели GigaChat-20B-A3B (размер в FP16 составляет около 39–40 ГБ). Однако, если запустить процесс «в лоб», операционная система задействует файл подкачки (Swap), из-за чего слияние будет идти очень медленно или завершится аварийно (ошибкой Out of Memory в ОС). Чтобы слияние гарантированно прошло успешно на 64 ГБ ОЗУ, скрипт необходимо оптимизировать. **Главный секрет**: нельзя загружать модель в память одним куском. Hugging Face умеет читать и обрабатывать модель послойно прямо с диска. 
 
-**Оптимизированный скрипт** слияния для 64 ГБ RAM [merge_low_ram.py](scripts/merge_low_ram_gigachat.py). 
+**Оптимизированный скрипт** слияния для 64 ГБ RAM [merge_low_ram.py](examples_scripts/merge_low_ram_gigachat.py). 
 
 Этот вариант использует параметр low_cpu_mem_usage=True и пошаговую склейку слоев, снижая пиковое потребление ОЗУ до ~42–45 ГБ.
 
@@ -386,13 +386,13 @@ python convert_hf_to_gguf.py ../merged_o1_gigachat_university --outfile ../unive
 ```bash
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install llama-cpp-python
 ```
-2. [Код скрипта тестирования](scripts/test_gguf_math.py)
+2. [Код скрипта тестирования](examples_scripts/test_gguf_math.py)
 
 3. Как использовать этот скрипт для валидации:
 
 После того как полностью пройдено все 4 этапа инструкции и получен файл university_model_Q4_K_M.gguf, запустите тест:
 ```bash
-python3 scripts/test_gguf_math.py
+python3 examples_scripts/test_gguf_math.py
 ```
 Модель должна начать ответ с заполнения тега `<Thought>`, где она подробно (на русском языке и с формулами LaTeX) распишет физический или математический смысл вашей задачи, а затем внутри тега `<output>` выдаст готовое, красивое итоговое уравнение. Если структура соблюдена, а математические знаки не превратились в кашу — дообучение прошло идеально.
 
@@ -457,7 +457,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  cd o1_gigachat-20b-a3b_lora_npi
  python3.10 -m venv env
  source env/bin/activate
- pip install -r requirements.txt
+ pip install -r examples_scripts/requirements.txt
  ```
  
  1.3. Подготовка данных и запуск сборки датасета
@@ -466,7 +466,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 
  ```bash
  # Если ваши материалы хранятся в виде многостраничных сборников конференций или выпусков журналов, положите их в папку `./raw_journals/` и запустите модуль разделения:
- python3 scripts/split_journal.py
+ python3 examples_scripts/split_journal.py
  ```
  Скрипт выполняется практически мгновенно. Результаты кладутся в `./university_pdfs_journals`. 
 
@@ -477,7 +477,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  1.3.3. Запустите скрипт многопоточной генерации для статей гуманитарной направленности:
  ```bash
  # Запускаем скрипт в фоне. Логи будут писаться в файл dataset_gen.log
- nohup python3 -u scripts/build_dataset_multi_server.py > dataset_gen.log 2>&1 &
+ nohup python3 -u examples_scripts/build_dataset_multi_server.py > dataset_gen.log 2>&1 &
  # Посмотреть, как идет процесс в реальном времени:
  tail -f dataset_gen.log
  ```
@@ -494,7 +494,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  1.3.6. Запустите скрипт многопоточной генерации для статей инженерной и технической направленности:
  ```bash
  # Запускаем скрипт в фоне. Логи будут писаться в файл dataset_math_gen.log
- nohup python3 -u scripts/build_dataset_multi_server_math.py > dataset_math_gen.log 2>&1 &
+ nohup python3 -u examples_scripts/build_dataset_multi_server_math.py > dataset_math_gen.log 2>&1 &
  # Посмотреть, как идет процесс в реальном времени:
  tail -f dataset_gen.log
  ```
@@ -506,7 +506,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 
  1.3.8. Запустите скрипт объединения датасетов с одновременным разделением итогового датасета на train и val
  ```bash
- python3 scripts/mix_datasets_train_val.py
+ python3 examples_scripts/mix_datasets_train_val.py
  ```
  1.3.9. При необходимости (как в [описанной конфигурации](#использованные-пк)), скопируйте файлы `university_train.json` и `university_val.json` на ПК, где установлена RTX 3090, остановите на нем llama.cpp и остальные программы, которые могут потреблять VRAM и RAM, скачайте репозиторий и установите все необходимые библиотеки.    
 
@@ -517,7 +517,7 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 
 ***В данной команде используется train_qlora_gigachat_micro_dataset.py, так как для первых экспериментов был собран набор данных train:51; validation:6.***
 ```bash
-nohup python3 -u scripts/train_qlora_gigachat_micro_dataset.py > train.log 2>&1 &
+nohup python3 -u examples_scripts/train_qlora_gigachat_micro_dataset.py > train.log 2>&1 &
 # Мониторинг обучения и температуры видеокарты в соседних вкладках:
 tail -f train.log
 watch -n 1 nvidia-smi
@@ -557,7 +557,7 @@ watch -n 1 nvidia-smi
  ```
  3.2.2. Запустите оптимизированный скрипт слияния из репозитория:
  ```bash
- python3 scripts/merge_low_ram_gigachat.py
+ python3 examples_scripts/merge_low_ram_gigachat.py
  ```
  Скрипт загружает базовую модель послойно (не всю сразу), подтягивает веса обученного адаптера из ./o1_gigachat_university_lora, математически складывает их и сохраняет полноценную FP16-модель частями по 2 ГБ в папку ./merged_o1_gigachat_university.
 
@@ -640,7 +640,7 @@ deactivate
 cd ..
 source env/bin/activate
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install llama-cpp-python
-python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
+python3 examples_scripts/test_gguf_math.py 2>&1 | tee test.log &
 ```
 --> `Ctrl+C`
 
@@ -649,9 +649,9 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 ### Дообучение [YandexGPT-5-Lite-8B](https://huggingface.co/yandex/YandexGPT-5-Lite-8B-pretrain) 
 
 Для этого использованы скрипты: 
-- [train_qlora_ygpt_micro_dataset.py](scripts/train_qlora_ygpt_micro_dataset.py), 
-- [merge_low_ram_ygpt.py](scripts/merge_low_ram_ygpt.py), 
-- [test_gguf_math_ygpt.py](scripts/test_gguf_math_ygpt.py)
+- [train_qlora_ygpt_micro_dataset.py](examples_scripts/train_qlora_ygpt_micro_dataset.py), 
+- [merge_low_ram_ygpt.py](examples_scripts/merge_low_ram_ygpt.py), 
+- [test_gguf_math_ygpt.py](examples_scripts/test_gguf_math_ygpt.py)
 
 ***Существенным отличием является возможность тренировать модель с контекстным окном 8192 на RTX3090 24Gb VRAM. Причем, объем занятой памяти составил только 17Gb, что создает возможность для обучения модели еще с большим контекстным окном***
 
@@ -662,9 +662,9 @@ python3 scripts/test_gguf_math.py 2>&1 | tee test.log &
 ### Дообучение [GigaChat3-10B-A1.8B-base](https://huggingface.co/ai-sage/GigaChat3-10B-A1.8B-base) 
 
 Для этого использованы скрипты: 
-- [train_qlora_gigachat3_micro_dataset.py](scripts/train_qlora_gigachat3_micro_dataset.py), 
-- [merge_low_ram_gigachat3.py](scripts/merge_low_ram_gigachat3.py), 
-- [test_gguf_math_gigachat3.py](scripts/test_gguf_math_gigachat3.py)
+- [train_qlora_gigachat3_micro_dataset.py](examples_scripts/train_qlora_gigachat3_micro_dataset.py), 
+- [merge_low_ram_gigachat3.py](examples_scripts/merge_low_ram_gigachat3.py), 
+- [test_gguf_math_gigachat3.py](examples_scripts/test_gguf_math_gigachat3.py)
 
 ***Существенным отличием является возможность тренировать модель с контекстным окном 8192 на RTX3090 24Gb VRAM. Причем, объем занятой памяти составил только 16Gb, что создает возможность для обучения модели еще с большим контекстным окном***
 
@@ -886,7 +886,7 @@ def query_gigachat_max_api(context_chunk):
     return None
 ```
 
-Необходимо подставить нужную функцию (query_deepseek_api или query_gigachat_max_api) внутрь диспетчера балансировки [build_dataset_multi_server_math.py](scripts/build_dataset_multi_server_math.py) вместо старого вызова worker_query_api, и проект станет полноценным промышленным решением.
+Необходимо подставить нужную функцию (query_deepseek_api или query_gigachat_max_api) внутрь диспетчера балансировки [build_dataset_multi_server_math.py](examples_scripts/build_dataset_multi_server_math.py) вместо старого вызова worker_query_api, и проект станет полноценным промышленным решением.
 
 ## Дообучение бОльших моделей. Например, [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)
 
@@ -926,8 +926,8 @@ def query_gigachat_max_api(context_chunk):
 - Чтобы модель работала на вашей RTX 3090 с максимальной скоростью, квантуйте её строго в формат Q2_K или Q3_K_M (финальный файл займет около 14–17 ГБ и полностью займет видеокарту на инференсе).
 
 ### Что изменить в скрипте обучения под Qwen?
-В файлах `scripts/train_qloraХХХХ.py` потребуется заменить архитектурные слои, на которые вешается LoRA. У моделей Qwen они называются иначе, чем у GigaChat.
-Замените блок LoraConfig, например, в файле [train_qlora_gigachat_micro_dataset.py](scripts/train_qlora_gigachat_micro_dataset.py#L105):
+В файлах `examples_scripts/train_qloraХХХХ.py` потребуется заменить архитектурные слои, на которые вешается LoRA. У моделей Qwen они называются иначе, чем у GigaChat.
+Замените блок LoraConfig, например, в файле [train_qlora_gigachat_micro_dataset.py](examples_scripts/train_qlora_gigachat_micro_dataset.py#L105):
 ```python
 peft_config = LoraConfig(
     r=16,
