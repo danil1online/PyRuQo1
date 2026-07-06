@@ -84,7 +84,7 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
 
     from pyruqo1.training import NPITrainer
     trainer = NPITrainer(config)
-    trainer.train()
+    trainer.train(dataset_type=dataset_type)
 
 
 @cli.command()

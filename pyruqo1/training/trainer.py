@@ -90,8 +90,8 @@ class NPITrainer:
 
         return dataset
 
-    def _build_trainer(self, dataset):
-        training_args = build_training_args(self.config)
+    def _build_trainer(self, dataset, dataset_type: str = "big"):
+        training_args = build_training_args(self.config, dataset_type=dataset_type)
         self.logger.info("Создание SFTTrainer...")
 
         self.trainer = SFTTrainer(
@@ -109,13 +109,14 @@ class NPITrainer:
             args=training_args,
         )
 
-    def train(self):
-        self.logger.info("=== Начинается процесс обучения ===")
+    def train(self, dataset_type: str = "big"):
+        self.logger.info(f"=== Начинается процесс обучения ===")
+        self.logger.info(f"Тип датасета: {dataset_type}")
 
         self._load_model()
         self._setup_lora()
         dataset = self._load_dataset()
-        self._build_trainer(dataset)
+        self._build_trainer(dataset, dataset_type=dataset_type)
 
         self.logger.info("Запуск обучения...")
         self.trainer.train()

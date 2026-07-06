@@ -129,7 +129,7 @@ def test_build_training_args_full():
                 "eval_steps": 25,
             }
         }
-        args = build_training_args(config)
+        args = build_training_args(config, dataset_type="big")
 
         kwargs = MockSFTConfig.call_args[1]
         assert kwargs["gradient_checkpointing"] is False
@@ -138,9 +138,46 @@ def test_build_training_args_full():
         assert kwargs["max_grad_norm"] == 1.0
         assert kwargs["warmup_ratio"] == 0.1
         assert kwargs["lr_scheduler_type"] == "cosine"
-        assert kwargs["save_strategy"] == "epoch"
-        assert kwargs["save_steps"] == 50
+        assert kwargs["save_strategy"] == "steps"
+        assert kwargs["save_steps"] == 100
         assert kwargs["report_to"] == "wandb"
         assert kwargs["max_seq_length"] == 4096
         assert kwargs["do_eval"] is True
-        assert kwargs["eval_steps"] == 25
+        assert kwargs["eval_steps"] == 50
+
+
+def test_build_training_args_micro():
+    from pyruqo1.training.config import build_training_args
+
+    with patch("pyruqo1.training.config.SFTConfig") as MockSFTConfig:
+        mock_instance = MagicMock()
+        MockSFTConfig.return_value = mock_instance
+
+        config = {"training": {
+            "output_dir": "./micro_out",
+            "per_device_train_batch_size": 1,
+            "gradient_accumulation_steps": 8,
+            "learning_rate": 2.0e-4,
+            "num_train_epochs": 1,
+            "optim": "paged_adamw_32bit",
+            "gradient_checkpointing": True,
+            "fp16": False,
+            "bf16": True,
+            "max_grad_norm": 0.3,
+            "warmup_ratio": 0.03,
+            "lr_scheduler_type": "constant",
+            "save_strategy": "steps",
+            "save_steps": 100,
+            "report_to": "none",
+            "max_seq_length": 2048,
+            "do_eval": True,
+            "eval_strategy": "steps",
+            "eval_steps": 50,
+        }}
+        args = build_training_args(config, dataset_type="micro")
+
+        kwargs = MockSFTConfig.call_args[1]
+        assert kwargs["save_strategy"] == "epoch"
+        assert kwargs["save_steps"] is None
+        assert kwargs["logging_steps"] == 2
+        assert kwargs["eval_steps"] == 2
