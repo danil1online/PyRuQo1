@@ -65,27 +65,36 @@ class DatasetGenerator:
     def _parse_response(self, choice: dict) -> Optional[Dict]:
         """Извлекает prompt/thought/response из ответа модели.
 
-        Работает с reasoning-моделями, которые отдают:
-        - reasoning_content — нативные мысли модели (llama.cpp)
-        - content — финальный текстовый ответ
-        """
-        full_response_text = choice.get("content", "").strip()
+        Работает с reasoning-моделями llama.cpp, которые отдают:
+        - reasoning_content — нативные мысли + ответ (Qwen3.6-35B-A3B-UD)
+        - content — финальный ответ (некоторые модели)
 
+        Для Qwen3.6-35B-A3B-UD: content="" (пустой), всё в reasoning_content.
+        """
         thought_text = choice.get("reasoning_content", "").strip()
 
         # Страховка: если сервер отдал мысли в другом поле
         if not thought_text:
             thought_text = choice.get("data", {}).get("reasoning_content", "").strip()
 
-        if full_response_text and thought_text:
+        full_response_text = choice.get("content", "").strip()
+
+        # Если content пустой (как у Qwen3.6-35B-A3B-UD), используем reasoning_content как ответ
+        if not full_response_text and thought_text:
             return {
-                "prompt": f"На основе фрагмента статьи решите аналитическую задачу: ...",
+                "prompt": "Решите аналитическую задачу на основе текста: ...",
+                "thought": "Анализ предоставленного контекста.",
+                "response": thought_text,
+            }
+        elif full_response_text and thought_text:
+            return {
+                "prompt": "На основе фрагмента статьи решите аналитическую задачу: ...",
                 "thought": thought_text,
                 "response": full_response_text,
             }
         elif full_response_text:
             return {
-                "prompt": f"Решите аналитическую задачу на основе текста: ...",
+                "prompt": "Решите аналитическую задачу на основе текста: ...",
                 "thought": "Анализ предоставленного контекста.",
                 "response": full_response_text,
             }
@@ -146,9 +155,9 @@ class DatasetGenerator:
         dataset_rows = []
 
         if len(self.servers) > 1:
-            dataset_rows = self._generate_multi_server(chunks, system_prompt)
+            dataset_rows = self._generate_multi_server(chunks, system_prompt, output_file)
         else:
-            dataset_rows = self._generate_single_server(chunks, system_prompt)
+            dataset_rows = self._generate_single_server(chunks, system_prompt, output_file)
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
@@ -156,7 +165,7 @@ class DatasetGenerator:
         self.logger.info(f"Генерация завершена. Сохранено {len(dataset_rows)} строк в {output_file}")
         return dataset_rows
 
-    def _generate_single_server(self, chunks: List[str], system_prompt: str) -> List[Dict]:
+    def _generate_single_server(self, chunks: List[str], system_prompt: str, output_file: str = None) -> List[Dict]:
         dataset_rows = []
 
         for i, chunk in enumerate(tqdm(chunks, desc="Генерация (1 сервер)")):
@@ -164,14 +173,14 @@ class DatasetGenerator:
             if row:
                 dataset_rows.append(row)
 
-            if len(dataset_rows) % self.save_interval == 0:
+            if output_file and len(dataset_rows) % self.save_interval == 0:
                 # Автосохранение каждые save_interval строк
                 with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
 
         return dataset_rows
 
-    def _generate_multi_server(self, chunks: List[str], system_prompt: str) -> List[Dict]:
+    def _generate_multi_server(self, chunks: List[str], system_prompt: str, output_file: str = None) -> List[Dict]:
         dataset_rows = []
         server_queue = Queue()
         for server in self.servers:
