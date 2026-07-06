@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from pyruqo1.utils.logger import get_logger
+from pyruqo1.utils.swap import managed_swap, get_managed_swap_path, remove_swap_file, DEFAULT_SWAP_PATH
 
 
 class GGUFConverter:
@@ -26,6 +27,7 @@ class GGUFConverter:
         model_path: str = None,
         quantization: str = None,
         output_dir: str = None,
+        managed_swap: bool = False,
     ):
         model_path = model_path or self.config.get("merge", {}).get("output_dir", "./merged_model")
         quantization = quantization or self.config.get("gguf", {}).get("quantization", "Q4_K_M")
@@ -35,6 +37,7 @@ class GGUFConverter:
         self.logger.info(f"Модель: {model_path}")
         self.logger.info(f"Квантование: {quantization}")
         self.logger.info(f"Выход: {output_dir}")
+        self.logger.info(f"Управление swap: {managed_swap}")
 
         self._check_llama_cpp()
 
@@ -45,6 +48,24 @@ class GGUFConverter:
 
         model_file = output_path / f"model.gguf"
 
+        if managed_swap:
+            merge_cfg = self.config.get("merge", {})
+            cpu_swap_gb = merge_cfg.get("cpu_swap_gb", 40)
+            self.logger.info(f"Swap включён. Swap: {cpu_swap_gb} ГБ...")
+            with managed_swap(size_gb=cpu_swap_gb):
+                self._do_convert(model_path, model_file, quantization, output_path)
+        else:
+            self._do_convert(model_path, model_file, quantization, output_path)
+
+        # Отключаем swap, если он был создан на этапе merge
+        swap_path = get_managed_swap_path()
+        if swap_path:
+            self.logger.info(f"Конвертация завершена. Отключение swap: {swap_path}...")
+            remove_swap_file(swap_path)
+
+        self.logger.info(f"=== GGUF готов ===")
+
+    def _do_convert(self, model_path, model_file, quantization, output_path):
         self.logger.info("Конвертация...")
         convert_llama_to_gguf(model_path, str(model_file), outtype=self._quant_to_dtype(quantization))
 
@@ -64,8 +85,6 @@ class GGUFConverter:
                 ["llama-quantize", str(model_file), str(quantized_file), quantization],
                 check=True,
             )
-
-        self.logger.info(f"=== GGUF готов: {quantized_file} ===")
 
     def _quant_to_dtype(self, quant: str):
         mapping = {

@@ -13,8 +13,25 @@ def get_logger():
     return logger
 
 
-DEFAULT_SWAP_PATH = "/tmp/npi_swapfile"
+DEFAULT_SWAP_PATH = "/tmp/pyruqo1_swapfile"
 DEFAULT_SWAP_SIZE_GB = 40
+
+# Глобальное состояние: какой swap-файл был создан managed_swap()
+_managed_swap_path = None
+
+
+def get_managed_swap_path():
+    return _managed_swap_path
+
+
+def set_managed_swap_path(path):
+    global _managed_swap_path
+    _managed_swap_path = path
+
+
+def clear_managed_swap_path():
+    global _managed_swap_path
+    _managed_swap_path = None
 
 
 def create_swap_file(size_gb: int = DEFAULT_SWAP_SIZE_GB, path: str = DEFAULT_SWAP_PATH) -> str:
@@ -55,6 +72,7 @@ def create_swap_file(size_gb: int = DEFAULT_SWAP_SIZE_GB, path: str = DEFAULT_SW
             f"  sudo swapon {path}"
         )
 
+    set_managed_swap_path(path)
     logger.info(f"Swap активирован: {path} ({size_gb} ГБ)")
     return path
 
@@ -77,6 +95,8 @@ def remove_swap_file(path: str = DEFAULT_SWAP_PATH) -> None:
         logger.info(f"Swap удалён: {path}")
     except OSError as e:
         logger.warning(f"Не удалось удалить swap-файл: {e}")
+
+    clear_managed_swap_path()
 
 
 def get_free_disk_gb(path: str = "/tmp") -> float:

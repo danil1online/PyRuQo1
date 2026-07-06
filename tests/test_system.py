@@ -60,7 +60,7 @@ def test_swap_functions():
         DEFAULT_SWAP_PATH,
     )
     assert DEFAULT_SWAP_SIZE_GB == 40
-    assert DEFAULT_SWAP_PATH == "/tmp/npi_swapfile"
+    assert DEFAULT_SWAP_PATH == "/tmp/pyruqo1_swapfile"
     assert get_free_ram_gb() > 0
     assert get_free_disk_gb() >= 0
 

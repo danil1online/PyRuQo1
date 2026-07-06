@@ -13,6 +13,7 @@ from pyruqo1.utils.swap import (
     create_swap_file,
     remove_swap_file,
     managed_swap,
+    get_managed_swap_path,
     DEFAULT_SWAP_SIZE_GB,
     DEFAULT_SWAP_PATH,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "create_swap_file",
     "remove_swap_file",
     "managed_swap",
+    "get_managed_swap_path",
     "DEFAULT_SWAP_SIZE_GB",
     "DEFAULT_SWAP_PATH",
 ]

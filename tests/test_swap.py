@@ -1,6 +1,6 @@
 import pytest
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.modules['fitz'] = MagicMock()
 sys.modules['transformers'] = MagicMock()
@@ -15,12 +15,13 @@ sys.modules['marker.models'] = MagicMock()
 sys.modules['marker.convert'] = MagicMock()
 sys.modules['llama_cpp'] = MagicMock()
 sys.modules['llama_cpp.convert'] = MagicMock()
+sys.modules['requests'] = MagicMock()
 
 
 def test_swap_defaults():
     from pyruqo1.utils.swap import DEFAULT_SWAP_SIZE_GB, DEFAULT_SWAP_PATH
     assert DEFAULT_SWAP_SIZE_GB == 40
-    assert DEFAULT_SWAP_PATH == "/tmp/npi_swapfile"
+    assert DEFAULT_SWAP_PATH == "/tmp/pyruqo1_swapfile"
 
 
 def test_swap_functions_exist():
@@ -28,12 +29,14 @@ def test_swap_functions_exist():
         create_swap_file,
         remove_swap_file,
         managed_swap,
+        get_managed_swap_path,
         get_free_ram_gb,
         get_free_disk_gb,
     )
     assert callable(create_swap_file)
     assert callable(remove_swap_file)
     assert callable(managed_swap)
+    assert callable(get_managed_swap_path)
     assert callable(get_free_ram_gb)
     assert callable(get_free_disk_gb)
 
@@ -51,3 +54,15 @@ def test_get_free_disk_gb():
     result = get_free_disk_gb("/tmp")
     assert isinstance(result, float)
     assert result >= 0
+
+
+def test_managed_swap_context_exists():
+    from pyruqo1.utils.swap import managed_swap
+    import inspect
+    assert inspect.isfunction(managed_swap)
+
+
+def test_managed_swap_path_tracking():
+    from pyruqo1.utils.swap import get_managed_swap_path, clear_managed_swap_path
+    clear_managed_swap_path()
+    assert get_managed_swap_path() is None

@@ -4,41 +4,101 @@
 
 ## Быстрый старт
 
+### 1. Установка зависимостей ОС
+
 ```bash
-# Установка
-pip install -e ".[test]"        # основной стек
-CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf,test]"  # + GGUF конвертация
+sudo apt update && sudo apt install ocrmypdf tesseract-ocr-rus build-essential cmake git python3-pip -y
+```
 
-# Проверка системы
+### 2. Установка библиотеки
+
+```bash
+# Основной стек (обучение + генерация датасета)
+pip install -e ".[test]"
+
+# + GGUF конвертация
+CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf,test]"
+```
+
+### 3. Проверка системы
+
+```bash
 pyruqo1 check
+```
 
-# Обучение
-pyruqo1 train --model gigachat-20b
+### 4. Разрезание журналов
 
-# Генерация датасета
-pyruqo1 generate --input ./pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
+```bash
+pyruqo1 split --input ./raw_journals --output-dir ./university_pdfs
+```
 
-# Разрезание журналов
-pyruqo1 split --input ./journals/
+### 5. Генерация датасета
 
-# Слияние LoRA
+**Гуманитарные тексты (один сервер, простой текст):**
+```bash
+pyruqo1 generate --input ./university_pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
+```
+
+**Математические текты (LaTeX-формулы, несколько серверов):**
+```bash
+pyruqo1 generate --input ./math_pdfs --mode math --servers http://localhost:8079/v1/chat/completions http://192.168.2.52:8181/v1/chat/completions
+```
+
+Серверы задаются двумя способами:
+- Повторяемый флаг: `--servers http://a --servers http://b`
+- Один флаг с разделителем: `--servers 'http://a,http://b'`
+
+Режимы:
+- `simple` — 1 сервер + гумманитарный текст (PDFParser)
+- `math` — 1 сервер + математические тексты с LaTeX (Marker-парсер)
+- `multi_server` — несколько серверов + гумманитарный текст
+
+### 6. Объединение датасетов
+
+**В один файл:**
+```bash
+pyruqo1 mixds --mode simple --input university_thinking_dataset.json university_math_dataset.json
+```
+
+**В два файла (train + val):**
+```bash
+pyruqo1 mixds --mode train_val --input university_thinking_dataset.json university_math_dataset.json
+```
+
+### 7. Обучение
+
+**По одному файлу (university_train.json):**
+```bash
+pyruqo1 train --model gigachat-20b --mode simple
+```
+
+**По двум файлам (train + val):**
+```bash
+pyruqo1 train --model gigachat-20b --mode train_val --train-file university_train.json --val-file university_val.json
+```
+
+### 8. Слияние LoRA
+
+```bash
 pyruqo1 merge --model gigachat-20b --manage-swap
+```
 
-# Конвертация в GGUF
-pyruqo1 gguf --model ./merged_model --quant Q4_K_M
+### 9. Конвертация в GGUF
+
+```bash
+pyruqo1 gguf --model ./merged_model --quant Q4_K_M --managed-swap
 ```
 
 ## CLI
 
 ```
+pyruqo1 check      # Проверка системы
+pyruqo1 split      # Разрезание журналов на статьи
+pyruqo1 generate   # Генерация датасета из PDF
+pyruqo1 mixds      # Объединение датасетов
 pyruqo1 train      # QLoRA-обучение
-pyruqo1 generate   # генерация датасета из PDF
-pyruqo1 parse      # парсинг PDF в чанки
-pyruqo1 split      # разрезание журналов на статьи
-pyruqo1 mix        # объединение датасетов + split train/val
-pyruqo1 merge      # слияние LoRA-адаптера
-pyruqo1 gguf       # конвертация в GGUF
-pyruqo1 check      # проверка системы
+pyruqo1 merge      # Слияние LoRA-адаптера
+pyruqo1 gguf       # Конвертация в GGUF
 ```
 
 ## Python API
@@ -69,10 +129,16 @@ generator.generate_from_chunks(chunks, "dataset.json", mode="simple")
 
 ```python
 from pyruqo1.merge import LORAMerger
+from pyruqo1.utils.swap import get_managed_swap_path, remove_swap_file
 
 config = load_config(model_name="gigachat-20b")
 merger = LORAMerger(config)
 merger.merge(manage_swap=True)
+
+# После merge можно отключить swap
+swap_path = get_managed_swap_path()
+if swap_path:
+    remove_swap_file(swap_path)
 ```
 
 ## Структура
@@ -101,7 +167,7 @@ tests/                 # базовые тесты
 - `gigachat3-10b.yaml` — GigaChat3-10B-A1.8B
 - `ygpt-5-lite-8b.yaml` — YandexGPT-5-Lite-8B
 
-Пользовательские оверрайды: создайте `configs/<model_name>.yaml` для переопреждения параметров.
+Пользовательские оверрайды: создайте `configs/<model_name>.yaml` для переопределения параметров.
 
 ## Зависимости
 
@@ -115,19 +181,16 @@ pip install -e "."
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
 ```
 
+`llama-cpp-python` через pip покрывает оба шага: `convert_hf_to_gguf` и `llama-quantize`. Исходники llama.cpp из репозитория не требуются.
+
 ## Управление swap
 
 Для merge и GGUF конвертации требуется ~80 ГБ дискового пространства и 60+ ГБ RAM.
 
 ```bash
-# Автоматическое управление swap
+# Автоматическое управление swap (создать перед, удалить после)
 pyruqo1 merge --model gigachat-20b --manage-swap
-
-# Ручное управление (Python API)
-from pyruqo1.utils.swap import managed_swap
-
-with managed_swap(size_gb=40):
-    merger.merge()
+pyruqo1 gguf --model ./merged_model --managed-swap
 ```
 
 ## Подробнее

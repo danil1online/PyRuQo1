@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Базовый пример обучения на готовом датасете HuggingFace.
-
-Сохранён для обратной совместимости.
-Рекомендуемый способ: pyruqo1 train --model gigachat-20b --train-file <path>
-"""
-
+"""Базовый пример обучения на готовом датасете HuggingFace. npi train --model gigachat-20b"""
 from pyruqo1.config import load_config
 from pyruqo1.training import NPITrainer
 
