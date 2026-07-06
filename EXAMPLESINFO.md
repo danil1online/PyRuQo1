@@ -68,7 +68,7 @@ git clone http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
 cd o1_gigachat-20b-a3b_lora_npi
 python3.10 -m venv env
 source env/bin/activate
-pip install -r examples_scripts/requirements.txt
+pip install -r examples_scripts/requirements-train.txt
 python examples_scripts/basic_example.py
 ```
 
@@ -455,9 +455,9 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
  ```bash
  git clone http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
  cd o1_gigachat-20b-a3b_lora_npi
- python3.10 -m venv env
- source env/bin/activate
- pip install -r examples_scripts/requirements.txt
+ python3.10 -m venv dsenv
+ source dsenv/bin/activate
+ pip install -r examples_scripts/requirements-ds.txt
  ```
  
  1.3. Подготовка данных и запуск сборки датасета
@@ -513,6 +513,12 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 2. QLoRA-обучение модели (Fine-Tuning)
 
 Этот этап выполняется строго на ПК с видеокартой RTX 3090 (24 ГБ VRAM).
+```bash
+deactivate
+python3.10 -m venv trainenv
+source trainenv/bin/activate
+pip install -r requirements-train.txt
+```
 Скрипт автоматически скачает базовую модель GigaChat-20B-A3B-instruct-v1.5, сквантует её в 4 бита для экономии памяти видеокарты, подключит ваш созданный датасет и начнет тренировку. 
 
 ***В данной команде используется train_qlora_gigachat_micro_dataset.py, так как для первых экспериментов был собран набор данных train:51; validation:6.***
@@ -638,7 +644,7 @@ watch -n 1 nvidia-smi
 ```bash
 deactivate
 cd ..
-source env/bin/activate
+source trainenv/bin/activate
 CMAKE_ARGS="-DGGML_CUDA=ON" pip install llama-cpp-python
 python3 examples_scripts/test_gguf_math.py 2>&1 | tee test.log &
 ```
