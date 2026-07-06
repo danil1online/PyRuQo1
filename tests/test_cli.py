@@ -52,3 +52,24 @@ def test_parse_servers_space_separated():
     assert len(result) == 2
     assert "http://srv1:8079" in result
     assert "http://srv2:8079" in result
+
+
+def test_train_dataset_type_micro():
+    """dataset_type=micro задаёт пути из micro_datasets/."""
+    from click.testing import CliRunner
+    from pyruqo1.cli import train
+
+    runner = CliRunner()
+    result = runner.invoke(train, ["--model", "gigachat-20b", "--dataset-type", "micro", "--mode", "train_val"])
+    # dataset-type принят без ошибки валидации
+    assert result.exit_code == 0
+
+
+def test_train_dataset_type_big():
+    """dataset_type=big — по умолчанию."""
+    from click.testing import CliRunner
+    from pyruqo1.cli import train
+
+    runner = CliRunner()
+    result = runner.invoke(train, ["--model", "gigachat-20b", "--mode", "simple"])
+    assert result.exit_code == 0

@@ -77,6 +77,13 @@ pyruqo1 train --model gigachat-20b --mode simple
 pyruqo1 train --model gigachat-20b --mode train_val --train-file university_train.json --val-file university_val.json
 ```
 
+**На микро-датасете (из micro_datasets/):**
+```bash
+pyruqo1 train --model gigachat-20b --dataset-type micro
+```
+
+Флаг `-D, --dataset-type` принимает `micro` (файлы в `micro_datasets/`) или `big` (файлы в корне проекта).
+
 ### 8. Слияние LoRA
 
 ```bash

@@ -31,12 +31,13 @@ def cli():
 @cli.command()
 @click.option("--config", "-c", "config_path", help="Путь к YAML-конфигу модели", default=None)
 @click.option("--model", "-m", "model_name", help="Имя модели (gigachat-20b, gigachat3-10b, ygpt-5-lite-8b)", default=None)
-@click.option("--train-file", help="Файл обучающего датасета", default=None)
-@click.option("--val-file", help="Файл валидационного датасета", default=None)
+@click.option("--dataset-type", "-D", "dataset_type", type=click.Choice(["micro", "big"]), default="big", help="Тип датасета: micro — из micro_datasets/, big — из корня проекта")
+@click.option("--train-file", help="Файл обучающего датасета (переопределяет dataset-type)", default=None)
+@click.option("--val-file", help="Файл валидационного датасета (переопределяет dataset-type)", default=None)
 @click.option("--output-dir", help="Директория для сохранения LoRA-адаптера", default=None)
 @click.option("--mode", "-M", "mode", type=click.Choice(["simple", "train_val"]), default="simple", help="Режим: simple — один train-файл, train_val — два файла (train + val)")
 @click.option("--system-report", is_flag=True, help="Показать отчёт о системе")
-def train(config_path, model_name, train_file, val_file, output_dir, mode, system_report):
+def train(config_path, model_name, dataset_type, train_file, val_file, output_dir, mode, system_report):
     """Запуск QLoRA-обучения."""
     if system_report:
         print_system_report()
@@ -44,18 +45,24 @@ def train(config_path, model_name, train_file, val_file, output_dir, mode, syste
 
     config = load_config(config_path, model_name)
 
-    if mode == "train_val":
-        if not train_file:
+    # Определяем пути к датасету
+    if not train_file:
+        if dataset_type == "micro":
+            train_file = "micro_datasets/university_train.json"
+        else:
             train_file = config.get("dataset", {}).get("train_file", "university_train.json")
-        if not val_file:
+
+    if mode == "train_val" and not val_file:
+        if dataset_type == "micro":
+            val_file = "micro_datasets/university_val.json"
+        else:
             val_file = config.get("dataset", {}).get("val_file", "university_val.json")
+
+    if mode == "train_val":
         if not train_file or not val_file:
             get_logger().error("Для train_val режима нужно указать --train-file и --val-file")
             return
     else:
-        # simple mode — только один train-файл
-        if not train_file:
-            train_file = config.get("dataset", {}).get("train_file", "university_train.json")
         if not train_file:
             get_logger().error("Для simple режима нужно указать --train-file")
             return
