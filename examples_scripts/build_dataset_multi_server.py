@@ -105,6 +105,7 @@ def worker_query_api(context_chunk):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
+        "chat_template_kwargs": {"enable_thinking": false},
         "temperature": 0.2, # Низкая температура для строгости математики
         "max_tokens": 2500  # Даем запас токенов на вывод формул
         # "response_format" УБРАН НАВСЕГДА — он ломал reasoning-модель!
