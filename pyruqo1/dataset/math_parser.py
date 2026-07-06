@@ -28,14 +28,14 @@ class MathParser:
             return self._model_lst
 
         try:
-            from marker.models import load_models
+            from marker.models import load_all_models
         except ImportError:
             raise ImportError(
                 "marker-pdf не установлен. Установите: pip install marker-pdf"
             )
 
         self.logger.info("Marker: загрузка нейросетей распознавания математического текста...")
-        self._model_lst = load_models()
+        self._model_lst = load_all_models()
         self.logger.info("Marker: модели загружены.")
         return self._model_lst
 
