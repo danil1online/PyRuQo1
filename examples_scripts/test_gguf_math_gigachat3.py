@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# Тестирование GGUF-модели через llama.cpp. Не требует изменения.
-
 import os
 import sys
 import json
