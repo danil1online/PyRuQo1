@@ -285,6 +285,30 @@ def gguf(model_path, quantization, output_dir, config_path, managed_swap):
 
 
 @cli.command()
+@click.option("--model", "-m", "model_type", required=True, type=click.Choice(["gigachat-20b", "gigachat3-10b", "ygpt-5-lite-8b"]), help="Тип модели (gigachat-20b, gigachat3-10b, ygpt-5-lite-8b)")
+@click.option("--modelfile", required=True, help="Путь к GGUF-файлу модели")
+@click.option("--val-file", required=True, help="Путь к валидационному датасету (JSON)")
+@click.option("--res", "-r", "res_file", default=None, help="Путь к файлу для сохранения результатов")
+@click.option("--num-samples", "-n", "num_samples", default=3, help="Количество случайных заданий для теста")
+def test_gguf(model_type, modelfile, val_file, res_file, num_samples):
+    """Тестирование GGUF-модели на валидационном датасете."""
+    from pyruqo1.gguf import GGUFTester
+
+    try:
+        tester = GGUFTester(
+            model_path=modelfile,
+            model_type=model_type,
+            val_file=val_file,
+            num_samples=num_samples,
+            res_file=res_file,
+        )
+        output_file = tester.run()
+        get_logger().info(f"Тестирование завершено. Результаты: {output_file}")
+    except Exception as e:
+        get_logger().error(f"Ошибка тестирования: {e}")
+
+
+@cli.command()
 @click.option("--min-ram", type=float, default=16, help="Минимальная RAM для проверки")
 @click.option("--min-vram", type=float, default=8, help="Минимальная VRAM для проверки")
 def check(min_ram, min_vram):

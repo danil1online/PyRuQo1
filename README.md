@@ -23,17 +23,23 @@ sudo apt update && sudo apt install ocrmypdf tesseract-ocr-rus build-essential c
 
 **Комплектование датасета** (torch 2.4.1 + marker-pdf 0.3.10):
 ```bash
+python3 -m venv dsenv
+source dsenv/bin/activate
 pip install -e ".[ds,test]"
 ```
 
 **Обучение** (torch 2.6.0, без marker-pdf):
 ```bash
+python3 -m venv dsenv
+source trainenv/bin/activate
 pip install -e ".[train,test]"
 ```
 
-**GGUF конвертация** (опционально):
+**Тестирование GGUF** (опционально):
 ```bash
-CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
+python3 -m venv llamacppenv
+source llamacppenv/bin/activate
+pip3 install llama-cpp-python
 ```
 
 ### 3. Проверка системы
@@ -141,14 +147,51 @@ pyruqo1 merge --model gigachat-20b --lora-dir ./o1_gigachat_university_lora --ou
 ### 9. Конвертация в GGUF
 
 ```bash
-pyruqo1 gguf --model ./merged_o1_gigachat_university_lora --quant Q4_K_M --output-dir ./gguf_o1_gigachat_university_lora
+# Деактивируем использованное для обучения моделей окружение trainenv, если нужно
+deactivate
+
+# Клонирование проекта llama.cpp
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+
+# Сборка проекта с поддержкой CUDA под RTX 3090
+cmake -B build -DGGML_CUDA=ON
+cmake --build build --config Release -j$(nproc)
+
+# Установка зависимостей конвертера. Сначала отключаем текущее окружение, потом создаем новое и ставим все в него
+python3.10 -m venv llamacppenv
+source llamacppenv/bin/activate
+pip3 install -r requirements.txt
+
+# Конвертация Hugging Face + обученный адаптер в GGUF(BF16)
+python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university_lora --outfile ../o1_gigachat_university_bf16.gguf
+
+# Финальное квантование (Сжатие модели)
+./build/bin/llama-quantize ../o1_gigachat_university_bf16.gguf ../o1_gigachat_university_Q4_K_M.gguf Q4_K_M
+
+# В корневой директории появится готовый к локальному инференсу файл o1_gigachat_university_Q4_K_M.gguf размером около 13–14 ГБ
 ```
-Параметры
-- `--model`, `-m`, `model_path`, Путь к объединённой модели, required=True
-- `--quant`, `-q`, `quantization`, Квантование (Q4_K_M, Q5_K_M, Q8_0 и т.д.), default="Q4_K_M"
-- `--output-dir`, `-o`, `output_dir`, Директория для GGUF, default="./gguf", model_file = output_path / f"model.gguf"
-- `--config`, `-c`, `config_path`, Путь к YAML-конфигу для дефолтных значений, default=None
-- `--managed-swap`, Автоматически управлять swap (отключит swap после конвертации), is_flag=True
+
+### 10. Тестирование GGUF
+
+```bash
+# Активируем окружение для тестирования (если оно ещё не активно)
+source llamacppenv/bin/activate
+
+pyruqo1 test-gguf --model gigachat-20b --modelfile ./o1_gigachat_university_Q4_K_M.gguf --val-file ./university_val.json
+```
+
+**Параметры:**
+- `--model`, `-m` — тип модели: `gigachat-20b`, `gigachat3-10b`, `ygpt-5-lite-8b`
+- `--modelfile` — путь к GGUF-файлу модели
+- `--val-file` — путь к валидационному датасету (JSON)
+- `--res`, `-r` — путь к файлу для сохранения результатов (по умолчанию: `gguf_test_results_{model_type}.json`)
+- `--num-samples`, `-n` — количество случайных заданий для теста (по умолчанию: 3)
+
+**Пример с сохранением результатов:**
+```bash
+pyruqo1 test-gguf --model gigachat3-10b --modelfile ./o1_gigachat3_Q4_K_M.gguf --val-file ./university_val.json --res ./results_gigachat3.json
+```
 
 ## CLI
 
@@ -159,7 +202,7 @@ pyruqo1 generate   # Генерация датасета из PDF
 pyruqo1 mixds      # Объединение датасетов
 pyruqo1 train      # QLoRA-обучение
 pyruqo1 merge      # Слияние LoRA-адаптера
-pyruqo1 gguf       # Конвертация в GGUF
+pyruqo1 test-gguf  # Тестирование GGUF-модели
 ```
 
 ## Python API
@@ -211,7 +254,7 @@ pyruqo1/                   # основная библиотека
 ├── dataset/           # парсинг, чанкинг, генерация датасета
 ├── training/          # QLoRA-обучение
 ├── merge/             # слияние LoRA
-├── gguf/              # конвертация в GGUF
+├── gguf/              # конвертация в GGUF + тестирование
 └── cli.py             # CLI (click)
 
 examples_scripts/      # старые скрипты (сохранены для совместимости)
@@ -237,14 +280,14 @@ torch 2.6.0, без marker-pdf:
 pip install -e ".[train]"
 ```
 
-### 3. GGUF конвертация
+### 3. Тестирование GGUF
 
-llama-cpp-python с поддержкой CUDA:
+llama-cpp-python с поддержкой CUDA (устанавливается из исходников llama.cpp):
 ```bash
-CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
+# См. инструкцию в разделе "Конвертация в GGUF"
 ```
 
-`llama-cpp-python` через pip покрывает оба шага: `convert_hf_to_gguf` и `llama-quantize`. Исходники llama.cpp из репозитория не требуются.
+Для тестирования GGUF-моделей используется `llama-cpp-python`, который устанавливается через `pip3 install llama-cpp-python` в окружении `llamacppenv`.
 
 ## Управление swap
 
@@ -253,7 +296,6 @@ CMAKE_ARGS="-DGGML_CUDA=ON" pip install -e ".[gguf]"
 ```bash
 # Автоматическое управление swap (создать перед, удалить после)
 pyruqo1 merge --model gigachat-20b --manage-swap
-pyruqo1 gguf --model ./merged_model --managed-swap
 ```
 
 ## Подробнее
