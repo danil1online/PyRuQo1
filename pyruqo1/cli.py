@@ -267,7 +267,7 @@ def merge(config_path, model_name, base_model, lora_dir, output_dir, manage_swap
 @click.option("--output-dir", "-o", "output_dir", default=None, help="Директория для GGUF")
 @click.option("--config", "-c", "config_path", help="Путь к YAML-конфигу для дефолтных значений", default=None)
 @click.option("--managed-swap", is_flag=True, help="Автоматически управлять swap (отключит swap после конвертации)")
-def gguf(model_path, quant, output_dir, config_path, managed_swap):
+def gguf(model_path, quantization, output_dir, config_path, managed_swap):
     """Конвертация модели в GGUF."""
     if not config_path:
         config = {}
@@ -278,7 +278,7 @@ def gguf(model_path, quant, output_dir, config_path, managed_swap):
     converter = GGUFConverter(config)
     converter.convert(
         model_path=model_path,
-        quantization=quant,
+        quantization=quantization,
         output_dir=output_dir,
         managed_swap=managed_swap,
     )

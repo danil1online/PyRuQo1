@@ -2,6 +2,15 @@
 
 Обучение российских LLM (GigaChat-20B / GigaChat3-10B / YandexGPT-8B) методом QLoRA на синтетическом датасете с цепочками рассуждений (Chain-of-Thought).
 
+## Конфигурация
+
+Встроенные конфиги в `pyruqo1/config/`:
+- `gigachat-20b.yaml` — GigaChat-20B-A3B (основной)
+- `gigachat3-10b.yaml` — GigaChat3-10B-A1.8B
+- `ygpt-5-lite-8b.yaml` — YandexGPT-5-Lite-8B
+
+Пользовательские оверрайды: создайте `configs/<model_name>.yaml` для переопределения параметров.
+
 ## Быстрый старт
 
 ### 1. Установка зависимостей ОС
@@ -118,14 +127,28 @@ pyruqo1 train --model gigachat-20b --mode train_val --train-file university_trai
 ### 8. Слияние LoRA
 
 ```bash
-pyruqo1 merge --model gigachat-20b --manage-swap
+pyruqo1 merge --model gigachat-20b --lora-dir ./o1_gigachat_university_lora --output-dir ./merged_o1_gigachat_university_lora
 ```
+Параметры:
+- `--config`, `-c`, `config_path`, Путь к YAML-конфигу, default=None
+- `--model`, `-m`, `model_name`, Имя модели для загрузки дефолтного конфига, default=None
+- `--base-model`, Путь/имя базовой модели, default=None
+- `--lora-dir`, Путь к LoRA-адаптеру, default="./output"
+- `--output-dir`, Директория для объединённой модели, default="./merged_model"
+- `--manage-swap`, Автоматически управлять swap (создать/удалить), is_flag=True
+- `--low-ram`, Режим низкого RAM (< 64 ГБ), is_flag=True
 
 ### 9. Конвертация в GGUF
 
 ```bash
-pyruqo1 gguf --model ./merged_model --quant Q4_K_M --managed-swap
+pyruqo1 gguf --model ./merged_o1_gigachat_university_lora --quant Q4_K_M --output-dir ./gguf_o1_gigachat_university_lora
 ```
+Параметры
+- `--model`, `-m`, `model_path`, Путь к объединённой модели, required=True
+- `--quant`, `-q`, `quantization`, Квантование (Q4_K_M, Q5_K_M, Q8_0 и т.д.), default="Q4_K_M"
+- `--output-dir`, `-o`, `output_dir`, Директория для GGUF, default="./gguf", model_file = output_path / f"model.gguf"
+- `--config`, `-c`, `config_path`, Путь к YAML-конфигу для дефолтных значений, default=None
+- `--managed-swap`, Автоматически управлять swap (отключит swap после конвертации), is_flag=True
 
 ## CLI
 
@@ -194,18 +217,9 @@ pyruqo1/                   # основная библиотека
 examples_scripts/      # старые скрипты (сохранены для совместимости)
 configs/               # пользовательские YAML-оверрайды (опционально)
 logs_example/          # примеры результатов обучения
-micro_datasets/        # микро-датасеты
+micro_datasets/        # микро-датасеты, которые были использованы для получения примеров результатов обучения
 tests/                 # базовые тесты
 ```
-
-## Конфигурация
-
-Встроенные конфиги в `pyruqo1/config/`:
-- `gigachat-20b.yaml` — GigaChat-20B-A3B (основной)
-- `gigachat3-10b.yaml` — GigaChat3-10B-A1.8B
-- `ygpt-5-lite-8b.yaml` — YandexGPT-5-Lite-8B
-
-Пользовательские оверрайды: создайте `configs/<model_name>.yaml` для переопределения параметров.
 
 ## Зависимости
 
