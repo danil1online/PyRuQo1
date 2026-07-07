@@ -8,9 +8,14 @@ from pyruqo1.utils.swap import get_managed_swap_path, remove_swap_file
 
 
 def _parse_servers(ctx, param, value):
-    """Обработка --servers: поддерживаем как повтор флага, так и запятую/пробел в одном значении."""
+    """Обработка --servers: по умолчанию включает режим gigachat.
+    
+    Поддерживает как повтор флага, так и запятую/пробел в одном значении.
+    """
     if not value:
-        return ("http://localhost:8079/v1/chat/completions",)
+        # Если флаг не передан, возвращаем None (DatasetGenerator сам включит GigaChat)
+        return None
+        
     servers = []
     for v in value:
         # Разделяем по запятой или пробелу
@@ -18,7 +23,9 @@ def _parse_servers(ctx, param, value):
             part = part.strip()
             if part:
                 servers.append(part)
-    return tuple(servers) if servers else ("http://localhost:8079/v1/chat/completions",)
+                
+    # Если флаг передали, но он оказался пустым (например, --servers ""), тоже возвращаем None
+    return list(servers) if servers else None
 
 
 @click.group()
