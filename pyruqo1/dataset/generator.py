@@ -276,7 +276,6 @@ class DatasetGenerator:
                     full_response = future.result()
                     if full_response:
                         # --- ПОСТ-ОЧИСТКА ТЕКСТА ОТ ЭХА СТАТЬИ ---
-                        # Список шаблонов для удаления вводных фраз робота
                         parasite_patterns = [
                             r"Для ответа на вопрос.*?(?:следует|необходимо) проанализировать.*?(?:текст|информацию|статью)\.?\s*",
                             r"В (?:приведенном|данном|представленном) тексте (?:указано|подчеркивается|говорится), что\s*",
@@ -290,25 +289,24 @@ class DatasetGenerator:
                         for pattern in parasite_patterns:
                             clean_response = re.sub(pattern, "", clean_response, flags=re.IGNORECASE)
                         
-                        # Убираем повисшие союзы "что ", если они остались в начале после вырезки
-                        # Пример: "<Thought>\nЧто А.Н. Шичков..." -> "<Thought>\nА.Н. Шичков..."
+                        # Исправлено: четкое разделение диапазонов а-я и a-z
                         clean_response = re.sub(r"(<Thought>\s*)что\s+", r"\1", clean_response, flags=re.IGNORECASE)
                         
-                        # Автоматически делаем первую букву текста внутри <Thought> заглавной
-                        match_thought = re.search(r"<Thought>(\s*)([а-яёа-z])", clean_response, re.IGNORECASE)
+                        # Исправлено: заменено а-z на корректные раздельные группы а-яёA-Za-z
+                        match_thought = re.search(r"<Thought>(\s*)([а-яёa-z])", clean_response, re.IGNORECASE)
                         if match_thought:
                             spaces = match_thought.group(1)
                             first_letter = match_thought.group(2).upper()
-                            # Заменяем только первое вхождение буквы после тега
+                            
+                            # Безопасная замена первой буквы без использования сложной регулярки
                             clean_response = re.sub(
-                                r"<Thought>\s*[а-яёа-z]", 
+                                r"<Thought>\s*[а-яёa-z]", 
                                 f"<Thought>{spaces}{first_letter}", 
                                 clean_response, 
                                 count=1, 
                                 flags=re.IGNORECASE
                             )
 
-                        # Сохраняем в датасет уже очищенную строку
                         dataset_rows.append({
                             "system": dataset_system_prompt,
                             "prompt": questions[idx],
