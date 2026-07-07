@@ -426,9 +426,19 @@ class DatasetGenerator:
         """Собирает финальную строку для датасета."""
         full_response = self._query_answer(server_url, system_prompt, user_prompt)
         if full_response:
+            # Если по какой-то причине пришел список или кортеж (например, [1, "Вопрос..."])
+            if isinstance(question, (list, tuple)):
+                # Берем последний элемент, где гарантированно лежит текст вопроса
+                clean_question = question[-1]
+            else:
+                clean_question = question
+                
+            # Дополнительно очищаем от случайных лишних кавычек по краям текста
+            clean_question = str(clean_question).strip().strip('"').strip("'")
+            
             return {
                 "system": system_prompt,
-                "prompt": question,
+                "prompt": clean_question,  # Теперь здесь строго строка с вопросом
                 "response": full_response,
             }
-        return None            
+        return None
