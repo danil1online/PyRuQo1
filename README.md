@@ -30,16 +30,15 @@ pip install -e ".[ds,test]"
 
 **Обучение** (torch 2.6.0, без marker-pdf):
 ```bash
-python3 -m venv dsenv
+python3 -m venv trainenv
 source trainenv/bin/activate
 pip install -e ".[train,test]"
 ```
 
 **Тестирование GGUF** (опционально):
 ```bash
-python3 -m venv llamacppenv
-source llamacppenv/bin/activate
-pip3 install llama-cpp-python
+# При активированном trainenv выполнить
+CMAKE_ARGS="-DGGML_CUDA=ON" pip install llama-cpp-python
 ```
 
 ### 3. Проверка системы
@@ -175,8 +174,11 @@ python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university_lora --outfile ..
 ### 10. Тестирование GGUF
 
 ```bash
-# Активируем окружение для тестирования (если оно ещё не активно)
-source llamacppenv/bin/activate
+# Деактивируем llamacppenv (если нужно)
+deactivate
+# Активируем окружение для тестирования
+cd ..
+source trainenv/bin/activate
 
 pyruqo1 test-gguf --model gigachat-20b --modelfile ./o1_gigachat_university_Q4_K_M.gguf --val-file ./university_val.json
 ```
