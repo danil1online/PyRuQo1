@@ -9,7 +9,7 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
 
 from pyruqo1.utils.logger import get_logger
-from pyruqo1.training.formatting import format_dataset, formatting_prompts_func
+from pyruqo1.training.formatting import format_dataset, formatting_prompts_func_default, formatting_prompts_func_chatml
 from pyruqo1.training.config import build_training_args
 
 # Хаки для DeepSeek V3 / GigaChat3 MoE-архитектуры
@@ -45,7 +45,13 @@ class NPITrainer:
             bnb_4bit_use_double_quant=True,
         )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=trust_remote)
+        tokenizer_cfg = self.config.get("tokenizer", {})
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=trust_remote,
+            use_fast=tokenizer_cfg.get("use_fast", True),
+            legacy=tokenizer_cfg.get("legacy", False),
+        )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -59,9 +65,10 @@ class NPITrainer:
         self.model.config.pad_token_id = self.tokenizer.eos_token_id
         self.model = prepare_model_for_kbit_training(self.model)
         # Fix: нормализация MoE-моделей (GigaChat3/DeepSeek V3) — переводим norm/gate в BF16
-        for name, module in self.model.named_modules():
-            if "norm" in name or "gate" in name:
-                module.to(torch.bfloat16)
+        if "gigachat3" in model_name.lower() or "deepseek" in model_name.lower():
+            for name, module in self.model.named_modules():
+                if "norm" in name or "gate" in name:
+                    module.to(torch.bfloat16)
 
     def _setup_lora(self):
         lora_cfg = self.config.get("lora", {})
@@ -83,9 +90,10 @@ class NPITrainer:
         dataset_cfg = self.config.get("dataset", {})
         train_file = dataset_cfg.get("train_file", "university_train.json")
         val_file = dataset_cfg.get("val_file")
+        format_type = self.config.get("training", {}).get("format_type", "default")
 
         if val_file:
-            self.logger.info(f"Загрузка датасета: train={train_file}, val={val_file}")
+            self.logger.info(f"Загрузка датасета: train={train_file}, val={val_file}, format={format_type}")
             data_files = {
                 "train": train_file,
                 "validation": val_file,
@@ -95,19 +103,25 @@ class NPITrainer:
                 f"Загружен train: {len(dataset['train'])} строк, "
                 f"validation: {len(dataset['validation'])} строк."
             )
-            dataset["train"] = format_dataset(dataset["train"], list(dataset["train"].column_names))
+            dataset["train"] = format_dataset(dataset["train"], list(dataset["train"].column_names), format_type=format_type)
             dataset["validation"] = format_dataset(
-                dataset["validation"], list(dataset["validation"].column_names)
+                dataset["validation"], list(dataset["validation"].column_names), format_type=format_type
             )
         else:
-            self.logger.info(f"Загрузка датасета: train={train_file} (без валидации)")
+            self.logger.info(f"Загрузка датасета: train={train_file} (без валидации), format={format_type}")
             dataset = load_dataset("json", data_files={"train": train_file})
             self.logger.info(f"Загружен train: {len(dataset['train'])} строк.")
-            dataset["train"] = format_dataset(dataset["train"], list(dataset["train"].column_names))
+            dataset["train"] = format_dataset(dataset["train"], list(dataset["train"].column_names), format_type=format_type)
 
         return dataset
 
     def _build_trainer(self, dataset, dataset_type: str = "big", has_validation: bool = False):
+        format_type = self.config.get("training", {}).get("format_type", "default")
+        if format_type == "chatml":
+            formatting_fn = formatting_prompts_func_chatml
+        else:
+            formatting_fn = formatting_prompts_func_default
+
         training_args = build_training_args(self.config, dataset_type=dataset_type, do_eval=has_validation)
         self.logger.info("Создание SFTTrainer...")
 
@@ -115,6 +129,7 @@ class NPITrainer:
             model=self.model,
             train_dataset=dataset["train"],
             eval_dataset=dataset.get("validation") if has_validation else None,
+            formatting_func=formatting_fn,
             peft_config=LoraConfig(
                 r=self.config.get("lora", {}).get("r", 16),
                 lora_alpha=self.config.get("lora", {}).get("lora_alpha", 32),
