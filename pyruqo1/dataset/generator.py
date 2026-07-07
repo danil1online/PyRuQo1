@@ -59,13 +59,10 @@ class DatasetGenerator:
 
         # Режим GigaChat
         if "gigachat" in self.servers:
-            # ЛЕНИВЫЙ ИМПОРТ: Проверяем и импортируем прямо в момент создания объекта
+            # ЛЕНИВЫЙ ИМПОРТ: Проверяем наличие библиотеки в виртуальном окружении
             try:
                 from gigachat import GigaChat
                 from gigachat.models import Chat
-                # Делаем GigaMessage глобальным для методов этого класса
-                global GigaMessage
-                from gigachat.models import Message as GigaMessage
             except ImportError:
                 raise ImportError(
                     "Выбран режим GigaChat, но библиотека не установлена в текущем окружении. "
