@@ -1,6 +1,5 @@
 import os
 import psutil
-import subprocess
 from typing import Tuple, Optional
 
 logger = None
@@ -41,34 +40,30 @@ def get_free_disk_gb(path: str = "/tmp") -> float:
 
 def check_gpu_available() -> bool:
     try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5
-        )
-        return result.returncode == 0 and bool(result.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
         return False
 
 
 def get_gpu_info() -> list:
     try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode != 0:
+        import torch
+        if not torch.cuda.is_available():
             return []
         gpus = []
-        for line in result.stdout.strip().split("\n"):
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) == 3:
-                gpus.append({
-                    "name": parts[0],
-                    "total_gb": int(parts[1]) / 1024,
-                    "free_gb": int(parts[2]) / 1024,
-                })
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            allocated = torch.cuda.memory_allocated(i)
+            reserved = torch.cuda.memory_reserved(i)
+            free = reserved - allocated
+            gpus.append({
+                "name": props.name,
+                "total_gb": props.total_memory / (1024 ** 3),
+                "free_gb": free / (1024 ** 3),
+            })
         return gpus
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+    except (ImportError, Exception):
         return []
 
 
