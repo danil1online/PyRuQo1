@@ -464,7 +464,9 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                return result_json["choices"]["message"]["content"].strip()
+                # ИСПРАВЛЕНО: choices — это список, берем первый элемент по индексу 0
+                choice = result_json["choices"][0]["message"]
+                return choice.get("content", "").strip()
         except Exception as e:
             self.logger.warning(f"Ошибка перевода блока на сервере {server_url}: {e}")
         return text
