@@ -103,7 +103,7 @@ pyruqo1 train --model gigachat-20b --mode simple --dataset-type micro
 pyruqo1 train --model gigachat-20b --mode train_val --train-file university_train.json --val-file university_val.json --dataset-type micro
 ```
 
-Флаг `-D, --dataset-type` управляет **параметрами обучения**, а не путями к файлам:
+Флаг `-D, --dataset-type` управляет **параметрами обучения**:
 
 | Параметр | `micro` (маленький датасет) | `big` (большой датасет) |
 |---|---|---|
