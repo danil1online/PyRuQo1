@@ -9,7 +9,7 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
 
 from pyruqo1.utils.logger import get_logger
-from pyruqo1.training.formatting import format_dataset, formatting_prompts_func_default, formatting_prompts_func_chatml
+from pyruqo1.training.formatting import format_dataset
 from pyruqo1.training.config import build_training_args
 
 # Хаки для DeepSeek V3 / GigaChat3 MoE-архитектуры
@@ -116,12 +116,6 @@ class NPITrainer:
         return dataset
 
     def _build_trainer(self, dataset, dataset_type: str = "big", has_validation: bool = False):
-        format_type = self.config.get("training", {}).get("format_type", "default")
-        if format_type == "chatml":
-            formatting_fn = formatting_prompts_func_chatml
-        else:
-            formatting_fn = formatting_prompts_func_default
-
         training_args = build_training_args(self.config, dataset_type=dataset_type, do_eval=has_validation)
         self.logger.info("Создание SFTTrainer...")
 
@@ -129,7 +123,6 @@ class NPITrainer:
             model=self.model,
             train_dataset=dataset["train"],
             eval_dataset=dataset.get("validation") if has_validation else None,
-            formatting_func=formatting_fn,
             peft_config=LoraConfig(
                 r=self.config.get("lora", {}).get("r", 16),
                 lora_alpha=self.config.get("lora", {}).get("lora_alpha", 32),
