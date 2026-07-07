@@ -43,7 +43,7 @@ pyruqo1 split --input ./raw_journals --output-dir ./university_pdfs
 
 **Гуманитарные тексты (один сервер, простой текст):**
 ```bash
-pyruqo1 generate --input ./university_pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
+pyruqo1 generate --input ./university_pdfs --mode simple --servers http://localhost:8079/v1/chat/completions --context-size 2048
 ```
 
 **Математические тексты (LaTeX-формулы, несколько серверов):**
@@ -58,7 +58,10 @@ pyruqo1 generate --input ./math_pdfs --mode math --servers 'http://localhost:807
 Режимы:
 - `simple` — 1 сервер + гуманитарный текст (PDFParser)
 - `math` — 1 сервер + математические тексты с LaTeX (Marker-парсер)
-- `multi_server` — несколько серверов + гуманитарный текст
+
+Размер контекста задается под будущую модель:
+- для большой модели gigachat-20b на VRAM 24 Gb большой контекст невозможен, поэтому `--context-size 2048` (задан по умолчанию)
+- для моделей gigachat3-10b, ygpt-5-lite-8b используется второй вариант `--context-size 8192`
 
 ### 6. Объединение датасетов
 
