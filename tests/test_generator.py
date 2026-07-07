@@ -41,18 +41,82 @@ def test_next_server():
     assert gen._get_next_server() == "http://a:8079"
 
 
-def test_generate_row_failure():
+def test_generate_answer_row_failure():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
-    result = gen._generate_row("context", "system")
+    result = gen._generate_answer_row(
+        server_url="http://localhost:8079",
+        chunk="context",
+        question="question?",
+        system_prompt="system",
+        user_prompt="user",
+    )
     assert result is None
 
 
-def test_default_system_prompt():
+def test_default_question_system_prompt():
     from pyruqo1.dataset.generator import DatasetGenerator
-    assert "научный методолог" in DatasetGenerator.DEFAULT_SYSTEM_PROMPT.lower()
+    assert "научный методолог" in DatasetGenerator.DEFAULT_QUESTION_SYSTEM_PROMPT.lower()
 
 
-def test_math_system_prompt():
+def test_default_answer_system_prompt():
     from pyruqo1.dataset.generator import DatasetGenerator
-    assert "LaTeX" in DatasetGenerator.MATH_SYSTEM_PROMPT
+    assert "научный методолог" in DatasetGenerator.DEFAULT_ANSWER_SYSTEM_PROMPT.lower()
+
+
+def test_math_question_system_prompt():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    assert "LaTeX" in DatasetGenerator.MATH_QUESTION_SYSTEM_PROMPT
+
+
+def test_math_answer_system_prompt():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    assert "LaTeX" in DatasetGenerator.MATH_ANSWER_SYSTEM_PROMPT
+
+
+def test_parse_question_response():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {"content": '{"prompt": "Какова причина явления?"}'}
+    result = gen._parse_question_response(choice)
+    assert result == "Какова причина явления?"
+
+
+def test_parse_question_response_empty():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {"content": ""}
+    result = gen._parse_question_response(choice)
+    assert result is None
+
+
+def test_parse_question_response_invalid_json():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {"content": "not json"}
+    result = gen._parse_question_response(choice)
+    assert result is None
+
+
+def test_parse_answer_response():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {
+        "reasoning_content": "Размышления модели",
+        "content": "Финальный ответ",
+    }
+    result = gen._parse_answer_response(choice)
+    assert result["thought"] == "Размышления модели"
+    assert result["response"] == "Финальный ответ"
+
+
+def test_parse_answer_response_only_thought():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {
+        "reasoning_content": "Размышления и ответ",
+        "content": "",
+    }
+    result = gen._parse_answer_response(choice)
+    assert result["thought"] == "Размышления и ответ"
+    assert result["response"] == ""
