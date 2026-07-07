@@ -8,13 +8,13 @@ from pyruqo1.utils.swap import get_managed_swap_path, remove_swap_file
 
 
 def _parse_servers(ctx, param, value):
-    """Обработка --servers: по умолчанию включает режим gigachat.
+    """Обработка --servers: по умолчанию возвращает ['gigachat'].
     
     Поддерживает как повтор флага, так и запятую/пробел в одном значении.
     """
     if not value:
-        # Если флаг не передан, возвращаем None (DatasetGenerator сам включит GigaChat)
-        return None
+        # Если флаг не передан, возвращаем дефолтный список с gigachat
+        return ['gigachat']
         
     servers = []
     for v in value:
@@ -24,9 +24,8 @@ def _parse_servers(ctx, param, value):
             if part:
                 servers.append(part)
                 
-    # Если флаг передали, но он оказался пустым (например, --servers ""), тоже возвращаем None
-    return list(servers) if servers else None
-
+    # Если флаг передали, но он оказался пустым, тоже подменяем на gigachat
+    return list(servers) if servers else ['gigachat']
 
 @click.group()
 @click.version_option(version="0.1.0")
