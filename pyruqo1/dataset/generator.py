@@ -376,21 +376,21 @@ class DatasetGenerator:
         return dataset_rows
 
     def _query_gigachat(self, system_prompt: str, user_prompt: str, max_tokens: int) -> Optional[str]:
-        """Прямой синхронный запрос к официальному Сбер API без использования сторонних классов моделей."""
+        """Прямой синхронный запрос к официальному Сбер API через универсальный payload."""
         try:
-            # Формируем историю сообщений в виде стандартных словарей
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+            # Собираем payload строго по правилам REST API GigaChat
+            payload = {
+                "model": self.gigachat_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": self.temperature,
+                "max_tokens": max_tokens
+            }
             
-            # В SDK Сбера метод .chat() принимает именованные аргументы напрямую
-            res = self.gigachat_client.chat(
-                messages=messages,
-                model=self.gigachat_model,
-                temperature=self.temperature,
-                max_tokens=max_tokens
-            )
+            # Вызываем метод, передавая сформированный словарь
+            res = self.gigachat_client.chat(payload)
             
             # Проверяем ответ по официальной структуре Сбера
             if res and res.choices:
