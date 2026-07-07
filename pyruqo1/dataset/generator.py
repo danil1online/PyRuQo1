@@ -430,15 +430,16 @@ class DatasetGenerator:
         return (eng_letters / len(letters)) > threshold
 
     def _translate_block(self, server_url: str, text: str) -> str:
-        """Переводит конкретный текстовый блок на русский язык БЕЗ рассуждений."""
+        """Синхронно переводит текст на русский язык, бережно сохраняя Markdown-структуру."""
         if not text.strip() or not self._needs_translation(text):
             return text
 
         system_prompt = (
-            "Ты — профессиональный переводчик научных и технических текстов. "
+            "Ты — профессиональный ИИ-переводчик научных публикаций и логов рассуждений (Chain-of-Thought). "
             "Переведи предоставленный текст на русский язык. "
-            "Сохраняй исходное Markdown-оформление, списки и формулы LaTeX в неизменном виде. "
-            "Выведи ТОЛЬКО чистый перевод, без твоих комментариев.\n"
+            "КРИТИЧЕСКИ ВАЖНО: сохраняй структуру Markdown, списки, жирный текст (например, **Analyze Input:**), "
+            "маркеры пунктов (1., 2., -) и формулы LaTeX в исходном виде. Переводи только сам текст описания. "
+            "Выведи ТОЛЬКО чистый перевод, без каких-либо твоих вводных слов и комментариев.\n"
             "CRITICAL: Do not internalize thoughts. Do not use reasoning. "
             "Do NOT output <think> tags. Provide the final translation immediately."
         )
@@ -446,12 +447,12 @@ class DatasetGenerator:
         payload = {
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Переведи этот текст на русский язык:\n\n{text}"}
+                {"role": "user", "content": f"Переведи этот научно-аналитический текст на русский язык, строго сохраняя разметку:\n\n{text}"}
             ],
-            "temperature": 0.1,  # Низкая температура для точного перевода
-            "max_tokens": 3000,
-            "reasoning_budget": 0,       # Отключаем мыслительный процесс сервера
-            "thinking_budget_tokens": 0  # Для совместимости версий
+            "temperature": 0.1,  # Минимальная температура для точности перевода
+            "max_tokens": 3500,
+            "reasoning_budget": 0,
+            "thinking_budget_tokens": 0
         }
 
         try:
@@ -463,29 +464,29 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                return result_json["choices"][0]["message"]["content"].strip()
+                return result_json["choices"]["message"]["content"].strip()
         except Exception as e:
-            self.logger.warning(f"Ошибка перевода на сервере {server_url}: {e}")
-        return text  # Если упало, возвращаем оригинал
+            self.logger.warning(f"Ошибка перевода блока на сервере {server_url}: {e}")
+        return text
 
     def _process_translation_pipeline(self, server_url: str, full_response: str) -> str:
-        """Разбирает ответ по тегам, переводит англоязычные части и собирает обратно."""
-        # Извлекаем текст внутри <Thought> и <output>
-        thought_match = re.search(r"<Thought>(.*?)</Thought>", full_response, re.DOTALL)
-        output_match = re.search(r"<output>(.*?)</output>", full_response, re.DOTALL)
+        """Разбирает ответ по тегам, переводит англоязычный CoT и output, сохраняя структуру тегов."""
+        # Паттерны для поиска блоков с учетом регистра и возможных пробелов
+        thought_match = re.search(r"<Thought>(.*?)</Thought>", full_response, re.DOTALL | re.IGNORECASE)
+        output_match = re.search(r"<output>(.*?)</output>", full_response, re.DOTALL | re.IGNORECASE)
 
-        # Если структура тегов стандартная
         if thought_match and output_match:
             thought_text = thought_match.group(1).strip()
             output_text = output_match.group(1).strip()
 
-            # Переводим каждый блок отдельно, если в нем много английского
+            # Отправляем на перевод только содержательную часть блоков
             translated_thought = self._translate_block(server_url, thought_text)
             translated_output = self._translate_block(server_url, output_text)
 
+            # Собираем красивую XML-подобную структуру обратно
             return f"<Thought>\n{translated_thought}\n</Thought>\n<output>\n{translated_output}\n</output>"
         
-        # Если тегов нет (сплошной текст), проверяем и перевод им целиком
+        # Запасной вариант, если модель выдала текст без тегов
         if self._needs_translation(full_response):
             return self._translate_block(server_url, full_response)
             
