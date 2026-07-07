@@ -83,7 +83,7 @@ pyruqo1 mixds university_thinking_dataset.json --mode train_val
 
 ### 7. Обучение
 
-**По одному файлу (university_train.json):**
+**По одному файлу (university_train.json из корня):**
 ```bash
 pyruqo1 train --model gigachat-20b --mode simple
 ```
@@ -93,16 +93,19 @@ pyruqo1 train --model gigachat-20b --mode simple
 pyruqo1 train --model gigachat-20b --mode train_val --train-file university_train.json --val-file university_val.json
 ```
 
-**На микро-датасете (из micro_datasets/):**
+**С параметрами micro (для маленьких датасетов):**
 ```bash
-pyruqo1 train --model gigachat-20b --dataset-type micro
+pyruqo1 train --model gigachat-20b --mode simple --dataset-type micro
 ```
 
-Флаг `-D, --dataset-type` принимает `micro` (файлы в `micro_datasets/`) или `big` (файлы в корне проекта).
+**С параметрами micro + два файла:**
+```bash
+pyruqo1 train --model gigachat-20b --mode train_val --train-file university_train.json --val-file university_val.json --dataset-type micro
+```
 
-**Различия режимов обучения:**
+Флаг `-D, --dataset-type` управляет **параметрами обучения**, а не путями к файлам:
 
-| Параметр | `micro` (50 строк) | `big` (1000+ строк) |
+| Параметр | `micro` (маленький датасет) | `big` (большой датасет) |
 |---|---|---|
 | `save_strategy` | `epoch` | `steps` |
 | `logging_steps` | `2` | `10` |
