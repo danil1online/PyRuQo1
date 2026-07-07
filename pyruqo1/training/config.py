@@ -2,11 +2,12 @@ import torch
 from transformers import TrainingArguments
 from trl import SFTConfig
 
-def build_training_args(config: dict, dataset_type: str = "big") -> SFTConfig:
+def build_training_args(config: dict, dataset_type: str = "big", do_eval: bool = True) -> SFTConfig:
     """Сборка SFTConfig из YAML-конфига.
 
     dataset_type: "micro" — микро-датасет (few-shot, epoch-чеки),
                   "big" — большой датасет (steps-чеки).
+    do_eval: False — отключить валидацию (например, при обучении по одному файлу).
     """
     training = config.get("training", {})
     dataset = config.get("dataset", {})
@@ -42,8 +43,8 @@ def build_training_args(config: dict, dataset_type: str = "big") -> SFTConfig:
         "max_seq_length": training.get("max_seq_length", 2048),
         "dataset_text_field": training.get("dataset_text_field", "text"),
         # Evaluation
-        "do_eval": training.get("do_eval", True),
-        "eval_strategy": training.get("eval_strategy", "steps"),
+        "do_eval": do_eval,
+        "eval_strategy": training.get("eval_strategy", "steps") if do_eval else "no",
         "eval_steps": eval_steps,
         "per_device_eval_batch_size": training.get("per_device_eval_batch_size", 1),
     }

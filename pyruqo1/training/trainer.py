@@ -67,37 +67,39 @@ class NPITrainer:
     def _load_dataset(self):
         dataset_cfg = self.config.get("dataset", {})
         train_file = dataset_cfg.get("train_file", "university_train.json")
-        val_file = dataset_cfg.get("val_file", "university_val.json")
+        val_file = dataset_cfg.get("val_file")
 
-        self.logger.info(f"Загрузка датасета: train={train_file}, val={val_file}")
-
-        data_files = {
-            "train": train_file,
-            "validation": val_file,
-        }
-
-        dataset = load_dataset("json", data_files=data_files)
-        self.logger.info(
-            f"Загружен train: {len(dataset['train'])} строк, "
-            f"validation: {len(dataset['validation'])} строк."
-        )
-
-        dataset = format_dataset(dataset["train"], list(dataset["train"].column_names))
-        if "validation" in dataset:
+        if val_file:
+            self.logger.info(f"Загрузка датасета: train={train_file}, val={val_file}")
+            data_files = {
+                "train": train_file,
+                "validation": val_file,
+            }
+            dataset = load_dataset("json", data_files=data_files)
+            self.logger.info(
+                f"Загружен train: {len(dataset['train'])} строк, "
+                f"validation: {len(dataset['validation'])} строк."
+            )
+            dataset = format_dataset(dataset["train"], list(dataset["train"].column_names))
             dataset["validation"] = format_dataset(
                 dataset["validation"], list(dataset["validation"].column_names)
             )
+        else:
+            self.logger.info(f"Загрузка датасета: train={train_file} (без валидации)")
+            dataset = load_dataset("json", data_files={"train": train_file})
+            self.logger.info(f"Загружен train: {len(dataset['train'])} строк.")
+            dataset = format_dataset(dataset["train"], list(dataset["train"].column_names))
 
-        return dataset
+        return dataset, val_file is not None
 
-    def _build_trainer(self, dataset, dataset_type: str = "big"):
-        training_args = build_training_args(self.config, dataset_type=dataset_type)
+    def _build_trainer(self, dataset, dataset_type: str = "big", has_validation: bool = False):
+        training_args = build_training_args(self.config, dataset_type=dataset_type, do_eval=has_validation)
         self.logger.info("Создание SFTTrainer...")
 
         self.trainer = SFTTrainer(
             model=self.model,
             train_dataset=dataset["train"],
-            eval_dataset=dataset.get("validation"),
+            eval_dataset=dataset.get("validation") if has_validation else None,
             peft_config=LoraConfig(
                 r=self.config.get("lora", {}).get("r", 16),
                 lora_alpha=self.config.get("lora", {}).get("lora_alpha", 32),
@@ -115,8 +117,8 @@ class NPITrainer:
 
         self._load_model()
         self._setup_lora()
-        dataset = self._load_dataset()
-        self._build_trainer(dataset, dataset_type=dataset_type)
+        dataset, has_validation = self._load_dataset()
+        self._build_trainer(dataset, dataset_type=dataset_type, has_validation=has_validation)
 
         self.logger.info("Запуск обучения...")
         self.trainer.train()
