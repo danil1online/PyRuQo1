@@ -227,10 +227,10 @@ class DatasetGenerator:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"{user_prompt}\n\nВыдай ответ СТРОГО в формате JSON с ключом 'prompt': {{\"prompt\": \"...\"}}"}
             ],
-            "temperature": 0.1,      # Низкая температура для стабильности JSON
-            "max_tokens": 400,       # Жесткое ограничение длины вопроса
-            "stop": ["<think>"],     # Не даем Qwen начать рассуждать
-            "response_format": {"type": "json_object"}  # Безопасно, так как reasoning подавлен
+            "temperature": 0.1,
+            "max_tokens": 400,
+            "stop": ["<think>"],
+            "response_format": {"type": "json_object"}
         }
         try:
             response = requests.post(
@@ -241,6 +241,7 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
+                # ИСПРАВЛЕНО: добавлен индекс, так как choices — это список
                 choice = result_json["choices"][0]["message"]
                 return self._parse_question_response(choice)
             else:
@@ -370,12 +371,7 @@ class DatasetGenerator:
         return dataset_rows
 
     def _query_answer(self, server_url: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-        """Запрос к серверу для генерации ответа (Этап 2).
-        
-        Включает полноценный CoT (размышления модели) без использования prefill,
-        динамически подстраивая лимиты под выбранный размер контекста.
-        """
-        # Лимитируем макс. токены ответа в зависимости от целевого контекста
+        """Запрос к серверу для генерации ответа (Этап 2)."""
         target_max_tokens = 900 if self.context_size == 2048 else 4000
         
         payload = {
@@ -395,7 +391,7 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                # Исправлено: заменено с result_json("choices")(0)... на квадратные скобки словаря/списка
+                # ИСПРАВЛЕНО: добавлен индекс, так как choices — это список
                 choice = result_json["choices"][0]["message"]
                 return choice.get("content", "").strip()
             else:
