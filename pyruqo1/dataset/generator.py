@@ -535,11 +535,11 @@ class DatasetGenerator:
             
             # --- ЭТАП 3: ПОСТ-ОБРАБОТКА И ПЕРЕВОД ---
             # Проверяем и при необходимости переводим внутренности блоков на русский язык
-            final_response = self._process_translation_pipeline(server_url, full_response)
+            #final_response = self._process_translation_pipeline(server_url, full_response)
             
             return {
                 "system": system_prompt,
                 "prompt": clean_question,
-                "response": final_response,
+                "response": full_response,#"response": final_response,
             }
         return None
