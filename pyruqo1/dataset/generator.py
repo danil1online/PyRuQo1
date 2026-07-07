@@ -123,6 +123,11 @@ class DatasetGenerator:
             chunks, questions, answer_system_prompt, output_file, user_prompt_template
         )
 
+        # Удаляем временный файл вопросов
+        tmp_file = output_file + ".tmp_questions"
+        if os.path.exists(tmp_file):
+            os.remove(tmp_file)
+
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
 
