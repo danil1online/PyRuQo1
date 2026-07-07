@@ -80,7 +80,7 @@ class NPITrainer:
                 f"Загружен train: {len(dataset['train'])} строк, "
                 f"validation: {len(dataset['validation'])} строк."
             )
-            dataset = format_dataset(dataset["train"], list(dataset["train"].column_names))
+            dataset["train"] = format_dataset(dataset["train"], list(dataset["train"].column_names))
             dataset["validation"] = format_dataset(
                 dataset["validation"], list(dataset["validation"].column_names)
             )
@@ -88,9 +88,9 @@ class NPITrainer:
             self.logger.info(f"Загрузка датасета: train={train_file} (без валидации)")
             dataset = load_dataset("json", data_files={"train": train_file})
             self.logger.info(f"Загружен train: {len(dataset['train'])} строк.")
-            dataset = format_dataset(dataset["train"], list(dataset["train"].column_names))
+            dataset["train"] = format_dataset(dataset["train"], list(dataset["train"].column_names))
 
-        return dataset, val_file is not None
+        return dataset
 
     def _build_trainer(self, dataset, dataset_type: str = "big", has_validation: bool = False):
         training_args = build_training_args(self.config, dataset_type=dataset_type, do_eval=has_validation)
@@ -117,7 +117,8 @@ class NPITrainer:
 
         self._load_model()
         self._setup_lora()
-        dataset, has_validation = self._load_dataset()
+        dataset = self._load_dataset()
+        has_validation = "validation" in dataset
         self._build_trainer(dataset, dataset_type=dataset_type, has_validation=has_validation)
 
         self.logger.info("Запуск обучения...")
