@@ -382,38 +382,28 @@ class DatasetGenerator:
 
         return None
 
-    def _parse_answer_response(self, choice: dict) -> Optional[Dict]:
-        """Извлекает thought/response из ответа модели (Этап 2).
+    def _parse_answer_response(self, choice: dict) -> Optional[str]:
+        """Извлекает полный ответ модели (Этап 2).
+
+        Возвращает response строку в формате:
+        <Thought> ... </Thought> <output> ... </output>
 
         Работает с reasoning-моделями llama.cpp, которые отдают:
-        - reasoning_content — нативные мысли + ответ (Qwen3.6-35B-A3B-UD)
-        - content — финальный ответ (некоторые модели)
+        - reasoning_content — нативные мысли модели
+        - content — финальный ответ (содержит <Thought>...<output>...)
         """
-        thought_text = choice.get("reasoning_content", "").strip()
+        full_response_text = choice.get("content", "").strip()
 
-        # Страховка: если сервер отдал мысли в другом поле
+        # Если content не пустой — это ответ модели с тегами
+        if full_response_text:
+            return full_response_text
+
+        # Если content пустой (как у Qwen3.6-35B-A3B-UD), берём reasoning_content
+        thought_text = choice.get("reasoning_content", "").strip()
         if not thought_text:
             thought_text = choice.get("data", {}).get("reasoning_content", "").strip()
 
-        full_response_text = choice.get("content", "").strip()
-
-        # Если content пустой (как у Qwen3.6-35B-A3B-UD), используем reasoning_content как ответ
-        if not full_response_text and thought_text:
-            return {
-                "thought": thought_text,
-                "response": full_response_text,
-            }
-        elif full_response_text and thought_text:
-            return {
-                "thought": thought_text,
-                "response": full_response_text,
-            }
-        elif full_response_text:
-            return {
-                "thought": "Анализ предоставленного контекста.",
-                "response": full_response_text,
-            }
-        return None
+        return thought_text if thought_text else None
 
     def _generate_answer_row(
         self,
@@ -423,14 +413,14 @@ class DatasetGenerator:
         system_prompt: str,
         user_prompt: str,
     ) -> Optional[Dict]:
-        """Собирает строку датасета из вопроса и ответа."""
-        answer_data = self._query_answer(server_url, chunk, question, system_prompt, user_prompt)
+        """Собирает строку датасета в формате HuggingFace Dataset_of_Russian_thinking."""
+        full_response = self._query_answer(server_url, chunk, question, system_prompt, user_prompt)
 
-        if answer_data and all(k in answer_data for k in ["thought", "response"]):
+        if full_response:
             prompt_with_context = f"Фрагмент научной публикации:\n\"\"\"\n{chunk}\n\"\"\"\n\n{question}"
             return {
                 "system": system_prompt,
                 "prompt": prompt_with_context,
-                "response": answer_data['response'],
+                "response": full_response,
             }
         return None

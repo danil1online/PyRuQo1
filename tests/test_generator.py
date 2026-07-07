@@ -98,19 +98,18 @@ def test_parse_question_response_invalid_json():
     assert result is None
 
 
-def test_parse_answer_response():
+def test_parse_answer_response_with_content():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
     choice = {
         "reasoning_content": "Размышления модели",
-        "content": "Финальный ответ",
+        "content": "<Thought>Логика</Thought> <output>Ответ</output>",
     }
     result = gen._parse_answer_response(choice)
-    assert result["thought"] == "Размышления модели"
-    assert result["response"] == "Финальный ответ"
+    assert result == "<Thought>Логика</Thought> <output>Ответ</output>"
 
 
-def test_parse_answer_response_only_thought():
+def test_parse_answer_response_only_reasoning_content():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
     choice = {
@@ -118,5 +117,15 @@ def test_parse_answer_response_only_thought():
         "content": "",
     }
     result = gen._parse_answer_response(choice)
-    assert result["thought"] == "Размышления и ответ"
-    assert result["response"] == ""
+    assert result == "Размышления и ответ"
+
+
+def test_parse_answer_response_both_empty():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {
+        "reasoning_content": "",
+        "content": "",
+    }
+    result = gen._parse_answer_response(choice)
+    assert result is None
