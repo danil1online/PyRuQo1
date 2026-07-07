@@ -30,7 +30,7 @@ training:
   eval_strategy: "steps"
   eval_steps: 50
   per_device_eval_batch_size: 1
-  max_seq_length: 2048
+  max_seq_length: 8192
   dataset_text_field: "text"
 
 dataset:

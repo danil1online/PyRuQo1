@@ -12,6 +12,15 @@ from pyruqo1.utils.logger import get_logger
 from pyruqo1.training.formatting import format_dataset, formatting_prompts_func
 from pyruqo1.training.config import build_training_args
 
+# Хаки для DeepSeek V3 / GigaChat3 MoE-архитектуры
+# Перехват index_add_ для разрешения конфликта BFloat16/Float32 в MoE-слоях
+_orig_index_add = torch.Tensor.index_add_
+def _safe_index_add(self, dim, index, source, *args, **kwargs):
+    if self.dtype != source.dtype:
+        source = source.to(self.dtype)
+    return _orig_index_add(self, dim, index, source, *args, **kwargs)
+torch.Tensor.index_add_ = _safe_index_add
+
 
 class NPITrainer:
     """Единый Trainer для QLoRA-обучения разных моделей."""
@@ -37,7 +46,8 @@ class NPITrainer:
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=trust_remote)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
@@ -46,7 +56,12 @@ class NPITrainer:
             device_map="auto",
             trust_remote_code=trust_remote,
         )
+        self.model.config.pad_token_id = self.tokenizer.eos_token_id
         self.model = prepare_model_for_kbit_training(self.model)
+        # Fix: нормализация MoE-моделей (GigaChat3/DeepSeek V3) — переводим norm/gate в BF16
+        for name, module in self.model.named_modules():
+            if "norm" in name or "gate" in name:
+                module.to(torch.bfloat16)
 
     def _setup_lora(self):
         lora_cfg = self.config.get("lora", {})
