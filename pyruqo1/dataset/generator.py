@@ -376,20 +376,26 @@ class DatasetGenerator:
         return dataset_rows
 
     def _query_gigachat(self, system_prompt: str, user_prompt: str, max_tokens: int) -> Optional[str]:
-        """Прямой синхронный запрос к официальному Сбер API."""
+        """Прямой синхронный запрос к официальному Сбер API без использования сторонних классов моделей."""
         try:
-            chat = Chat(
-                messages=[
-                    GigaMessage(role="system", content=system_prompt),
-                    GigaMessage(role="user", content=user_prompt)
-                ],
+            # Формируем историю сообщений в виде стандартных словарей
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            
+            # В SDK Сбера метод .chat() принимает именованные аргументы напрямую
+            res = self.gigachat_client.chat(
+                messages=messages,
                 model=self.gigachat_model,
                 temperature=self.temperature,
                 max_tokens=max_tokens
             )
-            res = self.gigachat_client.chat(chat)
-            if res.choices:
-                return res.choices.message.content.strip()
+            
+            # Проверяем ответ по официальной структуре Сбера
+            if res and res.choices:
+                return res.choices[0].message.content.strip()
+                
         except Exception as e:
             self.logger.warning(f"Ошибка вызова GigaChat API: {e}")
         return None
