@@ -11,18 +11,22 @@ from tqdm import tqdm
 from pyruqo1.utils.logger import get_logger, progress_bar
 
 
+REASONING_END = "\n\n</think>"
+
+
 class DatasetGenerator:
     """Двухэтапная генерация датасета через API llama.cpp (1 сервер или мульти-сервер).
 
-    Этап 1: Генерация вопроса (thinking_budget_tokens=0) — модель не размышляет.
-    Этап 2: Генерация ответа (без ограничения) — модель размышляет естественно.
+    Использует suffix-based reasoning control: вставляем
+    "assistant": {"content": "\n\n</think>"} с add_generation_prompt=false,
+    чтобы модель пропускала reasoning и сразу выдавала content.
     """
 
     # --- Этап 1: генерация вопроса ---
     DEFAULT_QUESTION_SYSTEM_PROMPT = (
         "Ты — ведущий научный методолог. Твоя задача — изучить фрагмент статьи и "
-        "придумать к нему сложный аналитический вопрос. Ответь СТРОГО в формате JSON "
-        "с ключом 'prompt'. Все ответы должны быть на русском языке."
+        "придумать к нему сложный аналитический вопрос (1-2 предложения). "
+        "Ответь СТРОГО в формате JSON с ключом 'prompt'. Все ответы должны быть на русском языке."
     )
 
     MATH_QUESTION_SYSTEM_PROMPT = (
@@ -83,10 +87,9 @@ class DatasetGenerator:
     ) -> List[Dict]:
         """Двухэтапная генерация датасета.
 
-        Этап 1: генерация вопросов (thinking_budget_tokens=0)
-        Этап 2: генерация ответов на вопросы (без ограничения на размышления)
+        Этап 1: генерация вопросов (suffix-based reasoning control)
+        Этап 2: генерация ответов на вопросы (suffix-based reasoning control)
         """
-        # Выбираем системные промпты в зависимости от режима
         question_system_prompt = (
             self.DEFAULT_QUESTION_SYSTEM_PROMPT
             if mode == "simple"
@@ -135,11 +138,7 @@ class DatasetGenerator:
         output_file: str,
         user_prompt_template: str,
     ) -> Dict[int, str]:
-        """Этап 1: генерация вопросов для всех чанков.
-
-        Returns:
-            Dict[int, str] — индекс чанка -> текст вопроса.
-        """
+        """Этап 1: генерация вопросов для всех чанков."""
         if len(self.servers) > 1:
             return self._generate_questions_multi_server(
                 chunks, system_prompt, output_file, user_prompt_template
@@ -160,7 +159,12 @@ class DatasetGenerator:
 
         for i, chunk in enumerate(tqdm(chunks, desc="Этап 1: генерация вопросов")):
             user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\""
-            question = self._query_question(server_url=self._get_next_server(), chunk=chunk, system_prompt=system_prompt, user_prompt=user_prompt)
+            question = self._query_question(
+                server_url=self._get_next_server(),
+                chunk=chunk,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
             if question:
                 questions[i] = question
 
@@ -185,14 +189,21 @@ class DatasetGenerator:
             server = server_queue.get()
             try:
                 user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\""
-                return idx, self._query_question(server, chunk, system_prompt, user_prompt)
+                return idx, self._query_question(
+                    server, chunk, system_prompt, user_prompt
+                )
             finally:
                 server_queue.put(server)
 
         with ThreadPoolExecutor(max_workers=len(self.servers)) as executor:
-            futures = {executor.submit(worker, i, chunk): i for i, chunk in enumerate(chunks)}
+            futures = {
+                executor.submit(worker, i, chunk): i
+                for i, chunk in enumerate(chunks)
+            }
 
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Этап 1: генерация вопросов"):
+            for future in tqdm(
+                as_completed(futures), total=len(futures), desc="Этап 1: генерация вопросов"
+            ):
                 idx = futures[future]
                 try:
                     question = future.result(timeout=self.timeout)
@@ -207,15 +218,21 @@ class DatasetGenerator:
         return questions
 
     def _query_question(self, server_url: str, chunk: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-        """Запрос к серверу для генерации вопроса (Этап 1)."""
+        """Запрос к серверу для генерации вопроса (Этап 1).
+
+        Использует suffix-based reasoning control:
+        вставляем assistant message с "\n\n</think>" и add_generation_prompt=false,
+        чтобы модель пропускала reasoning и сразу выдавала JSON в content.
+        """
         payload = {
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
+                {"role": "assistant", "content": REASONING_END},
             ],
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "thinking_budget_tokens": 0,  # Запрещаем модели размышлять
+            "add_generation_prompt": False,
         }
 
         try:
@@ -230,22 +247,47 @@ class DatasetGenerator:
                 choice = result_json["choices"][0]["message"]
                 return self._parse_question_response(choice)
             else:
-                self.logger.warning(f"Сервер {server_url} вернул код {response.status_code}: {response.text}")
+                self.logger.warning(
+                    f"Сервер {server_url} вернул код {response.status_code}: {response.text}"
+                )
         except Exception as e:
             self.logger.warning(f"Ошибка запроса к {server_url} (этап 1): {e}")
 
         return None
 
     def _parse_question_response(self, choice: dict) -> Optional[str]:
-        """Извлекает вопрос из JSON-ответа модели (Этап 1)."""
+        """Извлекает вопрос из JSON-ответа модели (Этап 1).
+
+        Убирает suffix "
+</think>
+
+" из начала и markdown-обёртку ```json ... ```.
+        Обрабатывает обрезанный JSON (добавляет скобки если нужно).
+        """
         content_str = choice.get("content", "").strip()
         if not content_str:
             return None
 
+        # Убираем suffix-тег
+        content_str = re.sub(r"^</think>\s*", "", content_str)
+
+        # Убираем markdown-обёртку
+        content_str = re.sub(r"^```(?:json)?\s*", "", content_str)
+        content_str = re.sub(r"\s*```$", "", content_str)
+
+        # Убираем trailing кавычку/скобку если ответ обрезан
+        content_str = content_str.rstrip('",')
+
         try:
             data = json.loads(content_str)
             return data.get("prompt", "").strip()
-        except (json.JSONDecodeError, AttributeError):
+        except json.JSONDecodeError:
+            # Попробуем извлечь строку из обрезанного JSON
+            match = re.search(r'"prompt"\s*:\s*"(.+)', content_str, re.DOTALL)
+            if match:
+                return match.group(1).strip()
+            return None
+        except AttributeError:
             return None
 
     def _save_questions_to_tmp(self, output_file: str, questions: Dict[int, str]) -> None:
@@ -293,7 +335,13 @@ class DatasetGenerator:
                 f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\n"
                 f"Вопрос: {question}"
             )
-            row = self._generate_answer_row(server_url=self._get_next_server(), chunk=chunk, question=question, system_prompt=system_prompt, user_prompt=user_prompt)
+            row = self._generate_answer_row(
+                server_url=self._get_next_server(),
+                chunk=chunk,
+                question=question,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
             if row:
                 dataset_rows.append(row)
 
@@ -327,14 +375,21 @@ class DatasetGenerator:
                     f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\n"
                     f"Вопрос: {question}"
                 )
-                return idx, self._query_answer(server, chunk, question, system_prompt, user_prompt)
+                return idx, self._query_answer(
+                    server, chunk, question, system_prompt, user_prompt
+                )
             finally:
                 server_queue.put(server)
 
         with ThreadPoolExecutor(max_workers=len(self.servers)) as executor:
-            futures = {executor.submit(worker, i, chunk): i for i, chunk in enumerate(chunks)}
+            futures = {
+                executor.submit(worker, i, chunk): i
+                for i, chunk in enumerate(chunks)
+            }
 
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Этап 2: генерация ответов"):
+            for future in tqdm(
+                as_completed(futures), total=len(futures), desc="Этап 2: генерация ответов"
+            ):
                 idx = futures[future]
                 try:
                     result = future.result(timeout=self.timeout)
@@ -352,16 +407,22 @@ class DatasetGenerator:
 
     def _query_answer(
         self, server_url: str, chunk: str, question: str, system_prompt: str, user_prompt: str
-    ) -> Optional[Dict]:
-        """Запрос к серверу для генерации ответа (Этап 2)."""
+    ) -> Optional[str]:
+        """Запрос к серверу для генерации ответа (Этап 2).
+
+        Использует suffix-based reasoning control:
+        вставляем assistant message с "\n\n</think>" и add_generation_prompt=false,
+        чтобы модель пропускала reasoning и сразу выдавала ответ с тегами <Thought>...</Thought> <output>...</output>.
+        """
         payload = {
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
+                {"role": "assistant", "content": REASONING_END},
             ],
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            # thinking_budget_tokens НЕ задаём — модель размышляет естественно
+            "add_generation_prompt": False,
         }
 
         try:
@@ -376,7 +437,9 @@ class DatasetGenerator:
                 choice = result_json["choices"][0]["message"]
                 return self._parse_answer_response(choice)
             else:
-                self.logger.warning(f"Сервер {server_url} вернул код {response.status_code}: {response.text}")
+                self.logger.warning(
+                    f"Сервер {server_url} вернул код {response.status_code}: {response.text}"
+                )
         except Exception as e:
             self.logger.warning(f"Ошибка запроса к {server_url} (этап 2): {e}")
 
@@ -387,23 +450,13 @@ class DatasetGenerator:
 
         Возвращает response строку в формате:
         <Thought> ... </Thought> <output> ... </output>
-
-        Работает с reasoning-моделями llama.cpp, которые отдают:
-        - reasoning_content — нативные мысли модели
-        - content — финальный ответ (содержит <Thought>...<output>...)
         """
-        full_response_text = choice.get("content", "").strip()
-
-        # Если content не пустой — это ответ модели с тегами
-        if full_response_text:
-            return full_response_text
-
-        # Если content пустой (как у Qwen3.6-35B-A3B-UD), берём reasoning_content
-        thought_text = choice.get("reasoning_content", "").strip()
-        if not thought_text:
-            thought_text = choice.get("data", {}).get("reasoning_content", "").strip()
-
-        return thought_text if thought_text else None
+        content = choice.get("content", "").strip()
+        if not content:
+            return None
+        # Убираем suffix-тег если модель его добавила
+        content = re.sub(r"^</think>\s*", "", content)
+        return content or None
 
     def _generate_answer_row(
         self,
@@ -414,10 +467,12 @@ class DatasetGenerator:
         user_prompt: str,
     ) -> Optional[Dict]:
         """Собирает строку датасета в формате HuggingFace Dataset_of_Russian_thinking."""
-        full_response = self._query_answer(server_url, chunk, question, system_prompt, user_prompt)
+        full_response = self._query_answer(
+            server_url, chunk, question, system_prompt, user_prompt
+        )
 
         if full_response:
-            prompt_with_context = f"Фрагмент научной публикации:\n\"\"\"\n{chunk}\n\"\"\"\n\n{question}"
+            prompt_with_context = question
             return {
                 "system": system_prompt,
                 "prompt": prompt_with_context,

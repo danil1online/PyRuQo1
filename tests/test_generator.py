@@ -98,34 +98,49 @@ def test_parse_question_response_invalid_json():
     assert result is None
 
 
+def test_parse_question_response_with_markdown():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {"content": "```json\n{\"prompt\": \"Какова причина?\"}\n```"}
+    result = gen._parse_question_response(choice)
+    assert result == "Какова причина?"
+
+
+def test_parse_question_response_with_suffix():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {"content": "</think>\n\n```json\n{\"prompt\": \"Какова причина?\"}\n```"}
+    result = gen._parse_question_response(choice)
+    assert result == "Какова причина?"
+
+
+def test_parse_question_response_truncated():
+    from pyruqo1.dataset.generator import DatasetGenerator
+    gen = DatasetGenerator()
+    choice = {"content": '"prompt": "Обрезанный вопрос с длинн...'}
+    result = gen._parse_question_response(choice)
+    assert result == "Обрезанный вопрос с длинн..."
+
+
 def test_parse_answer_response_with_content():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
-    choice = {
-        "reasoning_content": "Размышления модели",
-        "content": "<Thought>Логика</Thought> <output>Ответ</output>",
-    }
+    choice = {"content": "<Thought>Логика</Thought> <output>Ответ</output>"}
     result = gen._parse_answer_response(choice)
     assert result == "<Thought>Логика</Thought> <output>Ответ</output>"
 
 
-def test_parse_answer_response_only_reasoning_content():
+def test_parse_answer_response_with_suffix():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
-    choice = {
-        "reasoning_content": "Размышления и ответ",
-        "content": "",
-    }
+    choice = {"content": "</think>\n\n<Thought>Логика</Thought> <output>Ответ</output>"}
     result = gen._parse_answer_response(choice)
-    assert result == "Размышления и ответ"
+    assert result == "<Thought>Логика</Thought> <output>Ответ</output>"
 
 
-def test_parse_answer_response_both_empty():
+def test_parse_answer_response_empty():
     from pyruqo1.dataset.generator import DatasetGenerator
     gen = DatasetGenerator()
-    choice = {
-        "reasoning_content": "",
-        "content": "",
-    }
+    choice = {"content": ""}
     result = gen._parse_answer_response(choice)
     assert result is None
