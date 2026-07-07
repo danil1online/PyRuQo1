@@ -32,6 +32,7 @@ ds = [
     "transformers==4.48.3",
     "bitsandbytes==0.43.3",
     "marker-pdf==0.3.10",
+    "gigachat==0.2.1",
 ]
 train = [
     "torch==2.6.0",
