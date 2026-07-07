@@ -229,7 +229,11 @@ class DatasetGenerator:
             ],
             "temperature": 0.1,
             "max_tokens": 400,
-            "stop": ["<think>"],
+            
+            # --- УНИВЕРСАЛЬНОЕ ОТКЛЮЧЕНИЕ REASONING ДЛЯ ВСЕХ ВЕРСИЙ LLAMA.CPP ---
+            "reasoning_budget": 0,       # Для самых свежих сборок (официальный параметр)
+            "thinking_budget_tokens": 0, # Для промежуточных версий
+            
             "response_format": {"type": "json_object"}
         }
         try:
@@ -241,7 +245,6 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                # ИСПРАВЛЕНО: добавлен индекс, так как choices — это список
                 choice = result_json["choices"][0]["message"]
                 return self._parse_question_response(choice)
             else:
@@ -251,6 +254,7 @@ class DatasetGenerator:
         except Exception as e:
             self.logger.warning(f"Ошибка запроса к {server_url} (этап 1): {e}")
         return None
+
     def _parse_question_response(self, choice: dict) -> Optional[str]:
         """Извлекает и очищает сгенерированный вопрос из JSON-ответа."""
         content_str = choice.get("content", "").strip()
@@ -381,6 +385,7 @@ class DatasetGenerator:
             ],
             "temperature": 0.6,
             "max_tokens": target_max_tokens,
+            # Здесь МЫСЛИ НУЖНЫ, поэтому бюджет не ограничиваем
         }
         try:
             response = requests.post(
@@ -391,9 +396,18 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                # ИСПРАВЛЕНО: добавлен индекс, так как choices — это список
-                choice = result_json["choices"][0]["message"]
-                return choice.get("content", "").strip()
+                message_data = result_json["choices"][0]["message"]
+                
+                # Достаем отдельно мысли и отдельно ответ
+                reasoning = message_data.get("reasoning_content", "").strip()
+                final_output = message_data.get("content", "").strip()
+                
+                # Если сервер вернул мысли в отдельном поле, склеиваем их для вашего датасета
+                if reasoning:
+                    return f"<Thought>\n{reasoning}\n</Thought>\n<output>\n{final_output}\n</output>"
+                
+                # Если сервер вернул всё в одном поле (старый формат)
+                return final_output
             else:
                 self.logger.warning(
                     f"Сервер {server_url} вернул код {response.status_code}: {response.text}"
