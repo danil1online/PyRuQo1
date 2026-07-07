@@ -1,6 +1,6 @@
 import torch
-from transformers import TrainingArguments, SFTConfig
-
+from transformers import TrainingArguments
+from trl import SFTConfig
 
 def build_training_args(config: dict, dataset_type: str = "big") -> SFTConfig:
     """Сборка SFTConfig из YAML-конфига.
