@@ -9,22 +9,27 @@ from queue import Queue
 from tqdm import tqdm
 from pyruqo1.utils.logger import get_logger, progress_bar
 
+# Официальный SDK Сбера подгружаем лениво, чтобы не ломать скрипт, если библиотеки нет
+try:
+    from gigachat import GigaChat
+    from gigachat.models import Chat, Message as GigaMessage
+    GIGACHAT_AVAILABLE = True
+except ImportError:
+    GIGACHAT_AVAILABLE = False
+
+
 class DatasetGenerator:
-    """Двухэтапная генерация датасета через API llama.cpp (1 сервер или мульти-сервер).
+    """Двухэтапная генерация датасета с поддержкой Мульти-серверов (llama.cpp) и GigaChat API.
     
-    Этап 1: генерация коротких вопросов (без рассуждений).
-    Этап 2: генерация развернутых ответов в формате CoT (с рассуждениями),
-    длина которых зависит от целевого размера контекста.
+    По умолчанию (если servers=None) используется GigaChat от Сбера.
     """
     
     # --- Базовые инструкции для Этапа 1 (Вопросы всегда короткие, без мыслей) ---
     DEFAULT_QUESTION_SYSTEM_PROMPT = (
         "Ты — ведущий научный методолог. Твоя задача — изучить фрагмент статьи и "
         "придумать к нему ОДИН короткий, емкий аналитический вопрос (1-2 предложения). "
-        "Вопрос должен быть сформулирован максимально лаконично, чтобы вместе со следующим "
-        "за ним ответом гарантированно поместиться в лимит контекста.\n"
-        "CRITICAL: Do not internalize thoughts. Do not use reasoning. "
-        "Do NOT output <think> tags. Provide the final exact JSON immediately."
+        "Вопрос должен быть сформулирован максимально лаконично.\n"
+        "Отвечай строго текстом вопроса, без вводных слов, кавычек и форматирования JSON."
     )
     
     MATH_QUESTION_SYSTEM_PROMPT = (
@@ -32,28 +37,60 @@ class DatasetGenerator:
         "научной статьи с формулами в формате LaTeX. Выбери из текста ключевое математическое "
         "уравнение или теоретический вывод и сформулируй сложную, но лаконичную задачу (1-2 предложения), "
         "требующую доказать, вывести или решить это уравнение.\n"
-        "Для всех математических символов и формул используй СТРОГИЙ синтаксис LaTeX. "
-        "CRITICAL: Do not internalize thoughts. Do not use reasoning. "
-        "Do NOT output <think> tags. Provide the final exact JSON immediately."
+        "Для всех математических символов и формул используй СТРОГИЙ синтаксис LaTeX."
     )
-
+ 
     def __init__(
         self,
-        servers: List[str] = None,
+        servers: Optional[List[str]] = None,
         context_size: int = 2048,
         temperature: float = 0.2,
         max_tokens: int = 2500,
         save_interval: int = 20,
         timeout: int = 300,
+        gigachat_model: str = "GigaChat" # Можно "GigaChat-Pro" или "GigaChat-Max"
     ):
-        self.servers = servers or ["http://localhost:8079/v1/chat/completions"]
-        self.context_size = context_size  # Влияет на размер генерируемого ответа
+        self.context_size = context_size 
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.save_interval = save_interval
         self.timeout = timeout
         self.logger = get_logger()
         self._server_index = 0
+        self.gigachat_model = gigachat_model
+        self.gigachat_client = None
+
+        # ОПРЕДЕЛЯЕМ РЕЖИМ РАБОТЫ
+        # Если сервера не переданы, ставим маркер "gigachat" по умолчанию вместо localhost
+        if servers is None:
+            self.servers = ["gigachat"]
+        else:
+            self.servers = servers
+
+        # Если выбран GigaChat, инициализируем его по инструкциям Сбера
+        if "gigachat" in self.servers:
+            if not GIGACHAT_AVAILABLE:
+                raise ImportError("Выбран режим GigaChat, но библиотека не установлена. Выполните: pip install gigachat")
+            
+            credentials = os.getenv("GIGACHAT_CREDENTIALS")
+            if not credentials:
+                print("\n" + "="*60)
+                print("🔑 КЛЮЧ АВТОРИЗАЦИИ GIGACHAT НЕ НАЙДЕН!")
+                print("Пожалуйста, введите ваш GigaChat Authorization Key (Client Secret):")
+                credentials = input("> ").strip()
+                print("="*60 + "\n")
+                if not credentials:
+                    raise ValueError("Критическая ошибка: GigaChat Authorization Key не может быть пустым.")
+                os.environ["GIGACHAT_CREDENTIALS"] = credentials
+
+            self.gigachat_client = GigaChat(
+                credentials=credentials, 
+                verify_ssl_certs=False,
+                timeout=self.timeout
+            )
+            self.logger.info(f"DatasetGenerator инициализирован в режиме GigaChat ({self.gigachat_model})")
+        else:
+            self.logger.info(f"DatasetGenerator инициализирован в режиме кастомных серверов: {self.servers}")
 
     def _get_next_server(self) -> str:
         server = self.servers[self._server_index % len(self.servers)]
@@ -70,64 +107,55 @@ class DatasetGenerator:
         
         # Настройка системного промпта для Вопросов
         question_system_prompt = (
-            self.DEFAULT_QUESTION_SYSTEM_PROMPT
-            if mode == "simple"
-            else self.MATH_QUESTION_SYSTEM_PROMPT
+            self.DEFAULT_QUESTION_SYSTEM_PROMPT if mode == "simple" else self.MATH_QUESTION_SYSTEM_PROMPT
         )
         
         # Настройка системного промпта для Ответов (динамическая длина)
         if self.context_size == 2048:
-            length_instruction = (
-                "Пиши рассуждения и ответ лаконично, без повторений. "
-            )
-        else:  # 8192
-            length_instruction = (
-                "Проведи полную декомпозицию вопроса, сопоставь все факты. Затем дай развернутый, академический ответ."
-            )
+            length_instruction = "Пиши рассуждения лаконично, ограничь скрытый блок мыслей максимум 2-3 абзацами. Конечный ответ сделай кратким."
+        else: # 8192
+            length_instruction = "Проведи глубокую декомпозицию вопроса, сопоставь все факты. Разверни подробную цепочку шагов."
 
+        # СТРОГОЕ ТРЕБОВАНИЕ К ФОРМАТУ БЕЗ ПОВТОРЕНИЯ НАЗВАНИЙ ТЕГОВ ТЕКСТОМ
+        format_instruction = (
+            "Ты ОБЯЗАН структурировать ответ строго с помощью XML-тегов. "
+            "Сначала открой тег начала мысли <Thought>, детально распиши логику и закрой тегом конца мысли </Thought>. "
+            "Затем открой тег начала вывода <output>, запиши туда итоговый академический ответ и закрой тегом </output>.\n"
+            "КРИТИЧЕСКОЕ ПРАВИЛО: Внутри текста рассуждений никогда не дублируй и не цитируй названия самих этих тегов "
+            "в кавычках или в виде примеров, пиши сразу суть анализа!"
+        )
+
+        # Модифицируем системные промпты под требования русской локализации и архитектуры тегов
         if mode == "math":
             answer_system_prompt = (
                 "ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
                 "Ты — профессор высшей математики и теоретической физики. Перед тобой фрагмент "
                 "научной статьи с формулами в формате LaTeX и математическая задача. Подробно решите "
-                "эту задачу, пошагово расписав математическую логику решения, промежуточные преобразования "
-                "и законы. В финальном ответе запишите структурированный результат и конечную формулу. "
-                "Для всех математических символов и формул используйте СТРОГИЙ синтаксис LaTeX.\n"
-                f"Используйте формат: <Thought> Ваши рассуждения </Thought> <output> Ваш ответ </output>.\n"
-                f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}\n"
-                "ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ: Пиши логику мышления и выводы исключительно на русском языке!"
+                "эту задачу, пошагово расписав математическую логику решения, промежуточные преобразования и законы.\n"
+                f"{format_instruction}\n"
+                f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}"
             )
         else:
             answer_system_prompt = (
                 "ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
-                "Ты — ведущий научный методолог. Перед тобой фрагмент научной статьи и "
-                "аналитический вопрос к нему. Детально распиши логику рассуждения и дай ответ.\n"
-                f"Используйте формат: <Thought> Ваши рассуждения </Thought> <output> Ваш ответ </output>.\n"
-                f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}\n"
-                "ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ: Пиши логику мышления и выводы исключительно на русском языке!"
+                "Ты — ведущий научный методолог. Перед тобой фрагмент научной статьи и аналитический вопрос к нему. "
+                "Детально распиши логику рассуждения и дай ответ.\n"
+                f"{format_instruction}\n"
+                f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}"
             )
-        user_prompt_template = (
-            "Фрагмент научной публикации с LaTeX-формулами:"
-            if mode == "math"
-            else "Фрагмент научной публикации:"
-        )
+
+        user_prompt_template = "Фрагмент научной публикации с LaTeX-формулами:" if mode == "math" else "Фрагмент научной публикации:"
         
         self.logger.info(
             f"Генерация: {len(chunks)} чанков, лимит контекста={self.context_size}, режим={mode}, серверов={len(self.servers)}"
         )
-
+        
         # Этап 1: генерация вопросов
-        questions = self._generate_questions(
-            chunks, question_system_prompt, output_file, user_prompt_template
-        )
-        self.logger.info(
-            f"Этап 1 завершён. Сгенерировано {len(questions)} вопросов из {len(chunks)} чанков."
-        )
+        questions = self._generate_questions(chunks, question_system_prompt, output_file, user_prompt_template)
+        self.logger.info(f"Этап 1 завершён. Сгенерировано {len(questions)} вопросов.")
 
         # Этап 2: генерация ответов
-        dataset_rows = self._generate_answers(
-            chunks, questions, answer_system_prompt, output_file, user_prompt_template
-        )
+        dataset_rows = self._generate_answers(chunks, questions, answer_system_prompt, output_file, user_prompt_template)
 
         # Удаляем временный файл вопросов
         tmp_file = output_file + ".tmp_questions"
@@ -136,56 +164,41 @@ class DatasetGenerator:
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
-            
-        self.logger.info(
-            f"Генерация завершена. Сохранено {len(dataset_rows)} строк в {output_file}"
-        )
+        
+        self.logger.info(f"Генерация завершена. Сохранено {len(dataset_rows)} строк в {output_file}")
         return dataset_rows
 
-    def _generate_questions(
-        self,
-        chunks: List[str],
-        system_prompt: str,
-        output_file: str,
-        user_prompt_template: str,
-    ) -> Dict[int, str]:
-        if len(self.servers) > 1:
-            return self._generate_questions_multi_server(
-                chunks, system_prompt, output_file, user_prompt_template
-            )
-        else:
-            return self._generate_questions_single_server(
-                chunks, system_prompt, output_file, user_prompt_template
-            )
-
-    def _generate_questions_single_server(
-        self,
-        chunks: List[str],
-        system_prompt: str,
-        output_file: str,
-        user_prompt_template: str,
-    ) -> Dict[int, str]:
+    def _generate_questions(self, chunks: List[str], system_prompt: str, output_file: str, user_prompt_template: str) -> Dict[int, str]:
+        if len(self.servers) > 1 or self.servers[0] != "gigachat":
+            return self._generate_questions_servers(chunks, system_prompt, output_file, user_prompt_template)
+        
+        # Режим GigaChat (прямая многопоточность без очередей серверов)
         questions = {}
-        for i, chunk in enumerate(tqdm(chunks, desc="Этап 1: генерация вопросов")):
-            user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\""
-            question = self._query_question(
-                server_url=self._get_next_server(),
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-            )
-            if question:
-                questions[i] = question
-            if len(questions) % self.save_interval == 0:
-                self._save_questions_to_tmp(output_file, questions)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(self._query_gigachat, system_prompt, f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"", max_tokens=400): i
+                for i, chunk in enumerate(chunks)
+            }
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Этап 1: генерация вопросов (GigaChat)"):
+                idx = futures[future]
+                try:
+                    question = future.result()
+                    if question:
+                        questions[idx] = question.strip().strip('"').strip("'")
+                    if len(questions) % self.save_interval == 0:
+                        self._save_questions_to_tmp(output_file, questions)
+                except Exception as e:
+                    self.logger.warning(f"Ошибка этапа 1 для чанка {idx}: {e}")
         return questions
 
-    def _generate_questions_multi_server(
+    def _generate_questions_servers(
         self,
         chunks: List[str],
         system_prompt: str,
         output_file: str,
         user_prompt_template: str,
     ) -> Dict[int, str]:
+        """Генерация коротких вопросов через пул кастомных инференс-серверов."""
         questions = {}
         server_queue = Queue()
         for server in self.servers:
@@ -195,18 +208,13 @@ class DatasetGenerator:
             server = server_queue.get()
             try:
                 user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\""
-                return idx, self._query_question(server, system_prompt, user_prompt)
+                return idx, self._query_server_question(server, system_prompt, user_prompt)
             finally:
                 server_queue.put(server)
 
         with ThreadPoolExecutor(max_workers=len(self.servers)) as executor:
-            futures = {
-                executor.submit(worker, i, chunk): i
-                for i, chunk in enumerate(chunks)
-            }
-            for future in tqdm(
-                as_completed(futures), total=len(futures), desc="Этап 1: генерация вопросов"
-            ):
+            futures = {executor.submit(worker, i, chunk): i for i, chunk in enumerate(chunks)}
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Этап 1: генерация вопросов (Серверы)"):
                 idx = futures[future]
                 try:
                     question = future.result(timeout=self.timeout)
@@ -218,121 +226,127 @@ class DatasetGenerator:
                     self.logger.warning(f"Ошибка этапа 1 для чанка {idx}: {e}")
         return questions
 
-    def _query_question(self, server_url: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-        """Запрос к серверу для быстрой генерации вопроса в JSON-формате."""
-        payload = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"{user_prompt}\n\nВыдай ответ СТРОГО в формате JSON с ключом 'prompt': {{\"prompt\": \"...\"}}"}
-            ],
-            "temperature": 0.1,
-            "max_tokens": 400,
-            
-            # --- УНИВЕРСАЛЬНОЕ ОТКЛЮЧЕНИЕ REASONING ДЛЯ ВСЕХ ВЕРСИЙ LLAMA.CPP ---
-            "reasoning_budget": 0,       # Для самых свежих сборок (официальный параметр)
-            "thinking_budget_tokens": 0, # Для промежуточных версий
-            
-            "response_format": {"type": "json_object"}
-        }
-        try:
-            response = requests.post(
-                server_url,
-                headers={"Content-Type": "application/json"},
-                json=payload,
-                timeout=self.timeout,
-            )
-            if response.status_code == 200:
-                result_json = response.json()
-                choice = result_json["choices"][0]["message"]
-                return self._parse_question_response(choice)
-            else:
-                self.logger.warning(
-                    f"Сервер {server_url} вернул код {response.status_code}: {response.text}"
-                )
-        except Exception as e:
-            self.logger.warning(f"Ошибка запроса к {server_url} (этап 1): {e}")
-        return None
-
-    def _parse_question_response(self, choice: dict) -> Optional[str]:
-        """Извлекает и очищает сгенерированный вопрос из JSON-ответа."""
-        content_str = choice.get("content", "").strip()
-        if not content_str:
-            return None
-            
-        content_str = re.sub(r"^(?:json)?\s*", "", content_str)
-        content_str = re.sub(r"\s*$", "", content_str)
-        content_str = content_str.rstrip('",')
-        
-        try:
-            data = json.loads(content_str)
-            return data.get("prompt", "").strip()
-        except json.JSONDecodeError:
-            # Исправлено регулярное выражение: [^"]+ вместо (^")+ для корректного поиска строки внутри кавычек
-            match = re.search(r'"prompt"\s*:\s*"([^"]+)"', content_str, re.DOTALL)
-            if match:
-                return match.group(1).strip()
-            return None
-
-    def _save_questions_to_tmp(self, output_file: str, questions: Dict[int, str]) -> None:
-        """Сохраняет промежуточные вопросы в файл (для защиты от сбоев)."""
-        tmp_file = output_file + ".tmp_questions"
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(questions, f, ensure_ascii=False)
-
-    # ==================== Этап 2: генерация ответа ====================
-    def _generate_answers(
+    def generate_from_chunks(
         self,
         chunks: List[str],
-        questions: Dict[int, str],
-        system_prompt: str,
         output_file: str,
-        user_prompt_template: str,
+        mode: str = "simple",
     ) -> List[Dict]:
-        if len(self.servers) > 1:
-            return self._generate_answers_multi_server(
-                chunks, questions, system_prompt, output_file, user_prompt_template
+        """Главный управляющий метод: координирует двухэтапный процесс генерации."""
+        # Настройка системного промпта для Вопросов
+        question_system_prompt = (
+            self.DEFAULT_QUESTION_SYSTEM_PROMPT if mode == "simple" else self.MATH_QUESTION_SYSTEM_PROMPT
+        )
+        
+        # Настройка системного промпта для Ответов (динамическая длина)
+        if self.context_size == 2048:
+            length_instruction = "Пиши рассуждения лаконично, ограничь скрытый блок мыслей максимум 2-3 абзацами. Конечный ответ сделай кратким."
+        else: # 8192
+            length_instruction = "Проведи глубокую декомпозицию вопроса, сопоставь все факты. Разверни подробную цепочку шагов."
+
+        # СТРОГОЕ ТРЕБОВАНИЕ К ФОРМАТУ БЕЗ ПОВТОРЕНИЯ НАЗВАНИЙ ТЕГОВ ТЕКСТОМ
+        format_instruction = (
+            "Ты ОБЯЗАН структурировать ответ строго с помощью XML-тегов. "
+            "Сначала открой тег начала мысли <Thought>, детально распиши логику и закрой тегом конца мысли </Thought>. "
+            "Затем открой тег начала вывода <output>, запиши туда итоговый академический ответ и закрой тегом </output>.\n"
+            "КРИТИЧЕСКОЕ ПРАВИЛО: Внутри текста рассуждений никогда не дублируй и не цитируй названия самих этих тегов "
+            "в кавычках или в виде примеров, пиши сразу суть анализа!"
+        )
+
+        # Формируем системные промпты под требования русской локализации и архитектуры тегов
+        if mode == "math":
+            answer_system_prompt = (
+                "ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
+                "Ты — профессор высшей математики и теоретической физики. Перед тобой фрагмент "
+                "научной статьи с формулами в формате LaTeX и математическая задача. Подробно решите "
+                "эту задачу, пошагово расписав математическую логику решения, промежуточные преобразования и законы.\n"
+                f"{format_instruction}\n"
+                f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}"
             )
         else:
-            return self._generate_answers_single_server(
-                chunks, questions, system_prompt, output_file, user_prompt_template
+            answer_system_prompt = (
+                "ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
+                "Ты — ведущий научный методолог. Перед тобой фрагмент научной статьи и аналитический вопрос к нему. "
+                "Детально распиши логику рассуждения и дай ответ.\n"
+                f"{format_instruction}\n"
+                f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}"
             )
 
-    def _generate_answers_single_server(
-        self,
-        chunks: List[str],
-        questions: Dict[int, str],
-        system_prompt: str,
-        output_file: str,
-        user_prompt_template: str,
-    ) -> List[Dict]:
-        dataset_rows = []
-        for i, chunk in enumerate(tqdm(chunks, desc="Этап 2: генерация ответов")):
-            if i not in questions:
-                continue
-            question = questions[i]  # Исправлено: заменено с круглых скобок на квадратные
-            user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\nВопрос: {question}"
-            
-            row = self._generate_answer_row(
-                server_url=self._get_next_server(),
-                question=question,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-            )
-            if row:
-                dataset_rows.append(row)
-            if len(dataset_rows) % self.save_interval == 0:
-                with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
+        user_prompt_template = "Фрагмент научной публикации с LaTeX-формулами:" if mode == "math" else "Фрагмент научной публикации:"
+        
+        self.logger.info(
+            f"Генерация: {len(chunks)} чанков, лимит контекста={self.context_size}, режим={mode}, серверов={len(self.servers)}"
+        )
+        
+        # Этап 1: генерация вопросов
+        questions = self._generate_questions(chunks, question_system_prompt, output_file, user_prompt_template)
+        self.logger.info(f"Этап 1 завершён. Сгенерировано {len(questions)} вопросов.")
+
+        # Этап 2: генерация ответов
+        dataset_rows = self._generate_answers(chunks, questions, answer_system_prompt, output_file, user_prompt_template)
+
+        # Удаляем временный файл вопросов
+        tmp_file = output_file + ".tmp_questions"
+        if os.path.exists(tmp_file):
+            os.remove(tmp_file)
+
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
+        
+        self.logger.info(f"Генерация завершена. Сохранено {len(dataset_rows)} строк в {output_file}")
         return dataset_rows
 
-    def _generate_answers_multi_server(
-        self,
-        chunks: List[str],
-        questions: Dict[int, str],
-        system_prompt: str,
-        output_file: str,
-        user_prompt_template: str,
+    def _generate_answers(
+        self, 
+        chunks: List[str], 
+        questions: Dict[int, str], 
+        system_prompt: str, 
+        output_file: str, 
+        user_prompt_template: str
     ) -> List[Dict]:
+        """Точка входа для Этапа 2. Маршрутизирует генерацию CoT-ответов."""
+        if len(self.servers) > 1 or self.servers != "gigachat":
+            return self._generate_answers_servers(chunks, questions, system_prompt, output_file, user_prompt_template)
+
+        # Режим GigaChat для ответов (прямая многопоточность)
+        dataset_rows = []
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(
+                    self._query_gigachat, 
+                    system_prompt, 
+                    f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\nВопрос: {questions[i]}", 
+                    max_tokens=self.max_tokens
+                ): i
+                for i, chunk in enumerate(chunks) if i in questions
+            }
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Этап 2: CoT-ответов (GigaChat)"):
+                idx = futures[future]
+                try:
+                    full_response = future.result()
+                    if full_response:
+                        # GigaChat сразу генерирует русский текст, сохраняем "как есть"
+                        dataset_rows.append({
+                            "system": system_prompt,
+                            "prompt": questions[idx],
+                            "response": full_response,
+                        })
+                        if len(dataset_rows) % self.save_interval == 0:
+                            with open(output_file, "w", encoding="utf-8") as f:
+                                json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
+                except Exception as e:
+                    self.logger.warning(f"Ошибка этапа 2 для чанка {idx}: {e}")
+        return dataset_rows
+
+    def _generate_answers_servers(
+        self, 
+        chunks: List[str], 
+        questions: Dict[int, str], 
+        system_prompt: str, 
+        output_file: str, 
+        user_prompt_template: str
+    ) -> List[Dict]:
+        """Генерация CoT-ответов через пул ваших локальных инференс-серверов."""
         dataset_rows = []
         server_queue = Queue()
         for server in self.servers:
@@ -343,39 +357,73 @@ class DatasetGenerator:
                 return idx, None
             server = server_queue.get()
             try:
-                question = questions[idx]  # Исправлено: заменено с круглых скобок на квадратные
+                question = questions[idx]
                 user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\nВопрос: {question}"
-                row = self._generate_answer_row(server, question, system_prompt, user_prompt)
+                row = self._generate_answer_row_server(server, question, system_prompt, user_prompt)
                 return idx, row
             finally:
                 server_queue.put(server)
 
         with ThreadPoolExecutor(max_workers=len(self.servers)) as executor:
-            futures = {
-                executor.submit(worker, i, chunk): i
-                for i, chunk in enumerate(chunks)
-            }
-            for future in tqdm(
-                as_completed(futures), total=len(futures), desc="Этап 2: генерация ответов"
-            ):
-                idx = futures[future]  # Исправлено: заменено с круглых скобок на квадратные
+            futures = {executor.submit(worker, i, chunk): i for i, chunk in enumerate(chunks)}
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Этап 2: генерация ответов (Серверы)"):
+                idx = futures[future]
                 try:
                     res = future.result(timeout=self.timeout)
                     if res and len(res) == 2:
                         _, row = res
                         if row:
                             dataset_rows.append(row)
-                    if len(dataset_rows) % self.save_interval == 0:
-                        with open(output_file, "w", encoding="utf-8") as f:
-                            json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
+                        if len(dataset_rows) % self.save_interval == 0:
+                            with open(output_file, "w", encoding="utf-8") as f:
+                                json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
                 except Exception as e:
                     self.logger.warning(f"Ошибка этапа 2 для чанка {idx}: {e}")
         return dataset_rows
 
-    def _query_answer(self, server_url: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-        """Запрос к серверу для генерации ответа (Этап 2)."""
+    def _query_gigachat(self, system_prompt: str, user_prompt: str, max_tokens: int) -> Optional[str]:
+        """Прямой синхронный запрос к официальному Сбер API."""
+        try:
+            chat = Chat(
+                messages=[
+                    GigaMessage(role="system", content=system_prompt),
+                    GigaMessage(role="user", content=user_prompt)
+                ],
+                model=self.gigachat_model,
+                temperature=self.temperature,
+                max_tokens=max_tokens
+            )
+            res = self.gigachat_client.chat(chat)
+            if res.choices:
+                return res.choices.message.content.strip()
+        except Exception as e:
+            self.logger.warning(f"Ошибка вызова GigaChat API: {e}")
+        return None
+
+    def _query_server_question(self, server_url: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """Запрос короткого вопроса к вашему инференс-серверу (Этап 1)."""
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{user_prompt}\n\nВыдай ответ СТРОГО в формате JSON с ключом 'prompt': {{\"prompt\": \"...\"}}"}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 400,
+            "reasoning_budget": 0,
+            "thinking_budget_tokens": 0,
+            "response_format": {"type": "json_object"}
+        }
+        try:
+            response = requests.post(server_url, headers={"Content-Type": "application/json"}, json=payload, timeout=self.timeout)
+            if response.status_code == 200:
+                return self._parse_question_response(response.json()["choices"][0]["message"])
+        except Exception as e:
+            self.logger.warning(f"Ошибка запроса к {server_url} (этап 1): {e}")
+        return None
+
+    def _generate_answer_row_server(self, server_url: str, question: str, system_prompt: str, user_prompt: str) -> Optional[Dict]:
+        """Запрос полного CoT-ответа к вашему инференс-серверу с пост-трансляцией (Этап 2)."""
         target_max_tokens = 1200 if self.context_size == 2048 else 5000
-        
         payload = {
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -383,158 +431,100 @@ class DatasetGenerator:
             ],
             "temperature": 0.6,
             "max_tokens": target_max_tokens,
-            # Здесь МЫСЛИ НУЖНЫ, поэтому бюджет не ограничиваем
         }
         try:
-            response = requests.post(
-                server_url,
-                headers={"Content-Type": "application/json"},
-                json=payload,
-                timeout=self.timeout,
-            )
+            response = requests.post(server_url, headers={"Content-Type": "application/json"}, json=payload, timeout=self.timeout)
             if response.status_code == 200:
-                result_json = response.json()
-                message_data = result_json["choices"][0]["message"]
-                
-                # Достаем отдельно мысли и отдельно ответ
+                message_data = response.json()["choices"][0]["message"]
                 reasoning = message_data.get("reasoning_content", "").strip()
                 final_output = message_data.get("content", "").strip()
                 
-                # Если сервер вернул мысли в отдельном поле, склеиваем их для вашего датасета
                 if reasoning:
-                    return f"<Thought>\n{reasoning}\n</Thought>\n<output>\n{final_output}\n</output>"
+                    full_response = f"<Thought>\n{reasoning}\n</Thought>\n<output>\n{final_output}\n</output>"
+                else:
+                    full_response = final_output
                 
-                # Если сервер вернул всё в одном поле (старый формат)
-                return final_output
-            else:
-                self.logger.warning(
-                    f"Сервер {server_url} вернул код {response.status_code}: {response.text}"
-                )
+                # Очистка вопроса
+                clean_question = question[-1] if isinstance(question, (list, tuple)) else question
+                clean_question = str(clean_question).strip().strip('"').strip("'")
+                
+                # Запуск пайплайна перевода (только для кастомных/англоязычных локальных моделей)
+                final_response = self._process_translation_pipeline(server_url, full_response)
+                
+                return {
+                    "system": system_prompt,
+                    "prompt": clean_question,
+                    "response": final_response,
+                }
         except Exception as e:
             self.logger.warning(f"Ошибка запроса к {server_url} (этап 2): {e}")
         return None
 
+    def _parse_question_response(self, choice: dict) -> Optional[str]:
+        content_str = choice.get("content", "").strip()
+        if not content_str: return None
+        content_str = re.sub(r"^(?:json)?\s*", "", content_str)
+        content_str = re.sub(r"\s*$", "", content_str)
+        content_str = content_str.rstrip('",')
+        try:
+            data = json.loads(content_str)
+            return data.get("prompt", "").strip()
+        except json.JSONDecodeError:
+            match = re.search(r'"prompt"\s*:\s*"([^"]+)"', content_str, re.DOTALL)
+            if match: return match.group(1).strip()
+        return None
+
     def _needs_translation(self, text: str, threshold: float = 0.3) -> bool:
-        """Проверяет, превышает ли процент английских букв заданный порог."""
-        if not text:
-            return False
+        if not text: return False
         letters = [c for c in text if c.isalpha()]
-        if not letters:
-            return False
+        if not letters: return False
         eng_letters = sum(1 for c in letters if c.lower() in 'abcdefghijklmnopqrstuvwxyz')
         return (eng_letters / len(letters)) > threshold
 
     def _translate_block(self, server_url: str, text: str) -> str:
-        """Синхронно переводит текст на русский язык, бережно сохраняя Markdown-структуру."""
-        if not text.strip() or not self._needs_translation(text):
-            return text
-            
-        # --- МАСКИРОВАНИЕ ТЕГОВ ПЕРЕД ПЕРЕВОДОМ ---
-        # Заменяем теги, которые модель цитирует внутри текста, на безопасные маркеры
-        safe_text = text.replace("<Thought>", "=== START_THOUGHT ===")
-        safe_text = safe_text.replace("</Thought>", "=== END_THOUGHT ===")
-        safe_text = safe_text.replace("<output>", "=== START_OUTPUT ===")
-        safe_text = safe_text.replace("</output>", "=== END_OUTPUT ===")
-
-        system_prompt = (
-            "Ты — профессиональный ИИ-переводчик научных публикаций и логов рассуждений (Chain-of-Thought). "
-            "Переведи предоставленный текст на русский язык. "
-            "КРИТИЧЕСКИ ВАЖНО: сохраняй структуру Markdown, списки, жирный текст (например, **Analyze Input:**), "
-            "маркеры пунктов (1., 2., -), формулы LaTeX и маркеры структуры (=== START_THOUGHT ===, === END_THOUGHT ===, "
-            "=== START_OUTPUT ===, === END_OUTPUT ===) в исходном виде. Переводи только сам текст описания. "
-            "Выведи ТОЛЬКО чистый перевод, без каких-либо твоих вводных слов и комментариев.\n"
-            "CRITICAL: Do not internalize thoughts. Do not use reasoning. "
-            "Do NOT output <think> tags. Provide the final translation immediately."
-        )
+        if not text.strip() or not self._needs_translation(text): return text
+        safe_text = text.replace("<Thought>", "=== START_THOUGHT ===").replace("</Thought>", "=== END_THOUGHT ===")
+        safe_text = safe_text.replace("<output>", "=== START_OUTPUT ===").replace("</output>", "=== END_OUTPUT ===")
         
+        system_prompt = (
+            "Ты — профессиональный ИИ-переводчик научных публикаций. Переведи предоставленный текст на русский язык. "
+            "КРИТИЧЕСКИ ВАЖНО: сохраняй разметку и маркеры структуры (=== START_THOUGHT ===, === END_THOUGHT ===) без изменений. "
+            "Do NOT use reasoning. Provide the final translation immediately."
+        )
         payload = {
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Переведи этот научно-аналитический текст на русский язык, строго сохраняя разметку:\n\n{safe_text}"}
+                {"role": "user", "content": f"Переведи этот научно-аналитический текст на русский язык:\n\n{safe_text}"}
             ],
-            "temperature": 0.1, 
-            "max_tokens": 3500,
-            "reasoning_budget": 0,
-            "thinking_budget_tokens": 0
+            "temperature": 0.1, "max_tokens": 3500, "stop": ["<think>", "</think>"]
         }
         try:
-            response = requests.post(
-                server_url,
-                headers={"Content-Type": "application/json"},
-                json=payload,
-                timeout=self.timeout,
-            )
+            response = requests.post(server_url, headers={"Content-Type": "application/json"}, json=payload, timeout=self.timeout)
             if response.status_code == 200:
-                result_json = response.json()
-                choice = result_json["choices"][0]["message"]
-                translated_text = choice.get("content", "").strip()
-                
-                # --- РАЗМАСКИРОВАНИЕ ТЕГОВ ПОСЛЕ ПЕРЕВОДА ---
-                # Возвращаем назад исходные теги для сохранения в датасет
-                translated_text = translated_text.replace("=== START_THOUGHT ===", "<Thought>")
-                translated_text = translated_text.replace("=== END_THOUGHT ===", "</Thought>")
-                translated_text = translated_text.replace("=== START_OUTPUT ===", "<output>")
-                translated_text = translated_text.replace("=== END_OUTPUT ===", "</output>")
-                
-                return translated_text
+                translated_text = response.json()["choices"][0]["message"].get("content", "").strip()
+                return translated_text.replace("=== START_THOUGHT ===", "<Thought>").replace("=== END_THOUGHT ===", "</Thought>").replace("=== START_OUTPUT ===", "<output>").replace("=== END_OUTPUT ===", "</output>")
         except Exception as e:
-            self.logger.warning(f"Ошибка перевода блока на сервере {server_url}: {e}")
-            return text
+            self.logger.warning(f"Ошибка перевода блока: {e}")
+        return text
 
     def _process_translation_pipeline(self, server_url: str, full_response: str) -> str:
-        """Разбирает ответ по тегам, переводит англоязычный CoT и output, сохраняя структуру тегов."""
-        # Паттерны для поиска блоков с учетом регистра и возможных пробелов
-        # Находим, где заканчивается перечисление требований в тексте модели, и отрезаем его
         if "Требование к формату:" in full_response:
-                clean_response = full_response.split("Требование к формату:", 1)[1]
+            clean_response = full_response.split("Требование к формату:", 1)[1]
         else:
-                clean_response = full_response
-
-        # Теперь ищем теги в clean_response
+            clean_response = full_response
+            
         thought_match = re.search(r"<Thought>(.*?)</Thought>", clean_response, re.DOTALL | re.IGNORECASE)
         output_match = re.search(r"<output>(.*?)</output>", full_response, re.DOTALL | re.IGNORECASE)
-
+        
         if thought_match and output_match:
-            thought_text = thought_match.group(1).strip()
-            output_text = output_match.group(1).strip()
-
-            # Отправляем на перевод только содержательную часть блоков
-            translated_thought = self._translate_block(server_url, thought_text)
-            translated_output = self._translate_block(server_url, output_text)
-
-            # Собираем красивую XML-подобную структуру обратно
+            translated_thought = self._translate_block(server_url, thought_match.group(1).strip())
+            translated_output = self._translate_block(server_url, output_match.group(1).strip())
             return f"<Thought>\n{translated_thought}\n</Thought>\n<output>\n{translated_output}\n</output>"
         
-        # Запасной вариант, если модель выдала текст без тегов
         if self._needs_translation(full_response):
             return self._translate_block(server_url, full_response)
-            
         return full_response
 
-    def _generate_answer_row(
-        self,
-        server_url: str,
-        question: str,
-        system_prompt: str,
-        user_prompt: str,
-    ) -> Optional[Dict]:
-        """Собирает финальную строку для датасета и переводит её при необходимости."""
-        full_response = self._query_answer(server_url, system_prompt, user_prompt)
-        if full_response:
-            # Очистка вопроса
-            if isinstance(question, (list, tuple)):
-                clean_question = question[-1]
-            else:
-                clean_question = question
-            clean_question = str(clean_question).strip().strip('"').strip("'")
-            
-            # --- ЭТАП 3: ПОСТ-ОБРАБОТКА И ПЕРЕВОД ---
-            # Проверяем и при необходимости переводим внутренности блоков на русский язык
-            #final_response = self._process_translation_pipeline(server_url, full_response)
-            
-            return {
-                "system": system_prompt,
-                "prompt": clean_question,
-                "response": full_response,#"response": final_response,
-            }
-        return None
+    def _save_questions_to_tmp(self, output_file: str, questions: Dict[int, str]) -> None:
+        with open(output_file + ".tmp_questions", "w", encoding="utf-8") as f:
+            json.dump(questions, f, ensure_ascii=False)
