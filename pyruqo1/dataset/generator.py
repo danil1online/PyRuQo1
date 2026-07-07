@@ -2,6 +2,7 @@ import os
 import json
 import re
 import requests
+import time
 from pathlib import Path
 from typing import List, Optional, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -163,12 +164,13 @@ class DatasetGenerator:
         return dataset_rows
 
     def _generate_questions(self, chunks: List[str], system_prompt: str, output_file: str, user_prompt_template: str) -> Dict[int, str]:
-        if len(self.servers) > 1 or self.servers[0] != "gigachat":
+        """Точка входа для Этапа 1. Проверяет, работаем ли мы с GigaChat."""
+        if "gigachat" not in self.servers:
             return self._generate_questions_servers(chunks, system_prompt, output_file, user_prompt_template)
         
-        # Режим GigaChat (прямая многопоточность без очередей серверов)
+        # Режим GigaChat (прямая многопоточность)
         questions = {}
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor: # Снизили количество воркеров до 2
             futures = {
                 executor.submit(self._query_gigachat, system_prompt, f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"", max_tokens=400): i
                 for i, chunk in enumerate(chunks)
@@ -298,13 +300,13 @@ class DatasetGenerator:
         output_file: str, 
         user_prompt_template: str
     ) -> List[Dict]:
-        """Точка входа для Этапа 2. Маршрутизирует генерацию CoT-ответов."""
-        if len(self.servers) > 1 or self.servers != "gigachat":
+        """Точка входа для Этапа 2. Проверяет, работаем ли мы с GigaChat."""
+        if "gigachat" not in self.servers:
             return self._generate_answers_servers(chunks, questions, system_prompt, output_file, user_prompt_template)
 
-        # Режим GigaChat для ответов (прямая многопоточность)
+        # Режим GigaChat для ответов
         dataset_rows = []
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor: # Ответы генерируем строго в 1 поток из-за тяжести запросов
             futures = {
                 executor.submit(
                     self._query_gigachat, 
@@ -319,7 +321,6 @@ class DatasetGenerator:
                 try:
                     full_response = future.result()
                     if full_response:
-                        # GigaChat сразу генерирует русский текст, сохраняем "как есть"
                         dataset_rows.append({
                             "system": system_prompt,
                             "prompt": questions[idx],
@@ -376,28 +377,40 @@ class DatasetGenerator:
         return dataset_rows
 
     def _query_gigachat(self, system_prompt: str, user_prompt: str, max_tokens: int) -> Optional[str]:
-        """Прямой синхронный запрос к официальному Сбер API через универсальный payload."""
-        try:
-            # Собираем payload строго по правилам REST API GigaChat
-            payload = {
-                "model": self.gigachat_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": self.temperature,
-                "max_tokens": max_tokens
-            }
-            
-            # Вызываем метод, передавая сформированный словарь
-            res = self.gigachat_client.chat(payload)
-            
-            # Проверяем ответ по официальной структуре Сбера
-            if res and res.choices:
-                return res.choices[0].message.content.strip()
+        """Прямой синхронный запрос к API GigaChat с защитой от Rate Limit (429)."""
+        import time
+        
+        payload = {
+            "model": self.gigachat_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": self.temperature,
+            "max_tokens": max_tokens
+        }
+        
+        # Делаем до 5 попыток в случае получения 429 ошибки
+        for attempt in range(5):
+            try:
+                # Небольшая превентивная пауза, чтобы не спамить Сбер
+                time.sleep(0.5) 
                 
-        except Exception as e:
-            self.logger.warning(f"Ошибка вызова GigaChat API: {e}")
+                res = self.gigachat_client.chat(payload)
+                
+                if res and res.choices:
+                    return res.choices.message.content.strip()
+                    
+            except Exception as e:
+                # Если в тексте ошибки есть код 429 (Too Many Requests), засыпаем подольше
+                if "429" in str(e) or "Too Many Requests" in str(e):
+                    sleep_time = (attempt + 1) * 3 # С каждой попыткой ждем дольше: 3с, 6с, 9с...
+                    self.logger.warning(f"GigaChat Rate Limit (429). Повтор через {sleep_time} сек...")
+                    time.sleep(sleep_time)
+                    continue
+                else:
+                    self.logger.warning(f"Ошибка вызова GigaChat API: {e}")
+                    break
         return None
 
     def _query_server_question(self, server_url: str, system_prompt: str, user_prompt: str) -> Optional[str]:
