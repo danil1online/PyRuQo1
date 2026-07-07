@@ -377,7 +377,7 @@ class DatasetGenerator:
         return dataset_rows
 
     def _query_gigachat(self, system_prompt: str, user_prompt: str, max_tokens: int) -> Optional[str]:
-        """Прямой синхронный запрос к API GigaChat с защитой от Rate Limit (429)."""
+        """Прямой синхронный запрос к API GigaChat с защитой от 429 и универсальным парсингом словаря."""
         import time
         
         payload = {
@@ -390,21 +390,30 @@ class DatasetGenerator:
             "max_tokens": max_tokens
         }
         
-        # Делаем до 5 попыток в случае получения 429 ошибки
         for attempt in range(5):
             try:
-                # Небольшая превентивная пауза, чтобы не спамить Сбер
-                time.sleep(0.5) 
+                time.sleep(0.5) # Пауза между запросами
                 
                 res = self.gigachat_client.chat(payload)
                 
-                if res and res.choices:
-                    return res.choices.message.content.strip()
+                # --- УНИВЕРСАЛЬНЫЙ И БЕЗОПАСНЫЙ ПАРСИНГ ОТВЕТА СБЕРА ---
+                if res and hasattr(res, "choices") and res.choices:
+                    # Извлекаем первый элемент из списка choices
+                    first_choice = res.choices[0]
                     
+                    # Проверяем, вернулся ли словарь (dict) или объект библиотеки
+                    if isinstance(first_choice, dict):
+                        message = first_choice.get("message", {})
+                        if isinstance(message, dict):
+                            return message.get("content", "").strip()
+                    else:
+                        # Если это объект класса, берем атрибуты напрямую
+                        if hasattr(first_choice, "message"):
+                            return first_choice.message.content.strip()
+                            
             except Exception as e:
-                # Если в тексте ошибки есть код 429 (Too Many Requests), засыпаем подольше
                 if "429" in str(e) or "Too Many Requests" in str(e):
-                    sleep_time = (attempt + 1) * 3 # С каждой попыткой ждем дольше: 3с, 6с, 9с...
+                    sleep_time = (attempt + 1) * 3
                     self.logger.warning(f"GigaChat Rate Limit (429). Повтор через {sleep_time} сек...")
                     time.sleep(sleep_time)
                     continue
