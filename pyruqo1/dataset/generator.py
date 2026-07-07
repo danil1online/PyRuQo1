@@ -9,14 +9,6 @@ from queue import Queue
 from tqdm import tqdm
 from pyruqo1.utils.logger import get_logger, progress_bar
 
-# Официальный SDK Сбера подгружаем лениво, чтобы не ломать скрипт, если библиотеки нет
-try:
-    from gigachat import GigaChat
-    from gigachat.models import Chat, Message as GigaMessage
-    GIGACHAT_AVAILABLE = True
-except ImportError:
-    GIGACHAT_AVAILABLE = False
-
 
 class DatasetGenerator:
     """Двухэтапная генерация датасета с поддержкой Мульти-серверов (llama.cpp) и GigaChat API.
@@ -48,7 +40,7 @@ class DatasetGenerator:
         max_tokens: int = 2500,
         save_interval: int = 20,
         timeout: int = 300,
-        gigachat_model: str = "GigaChat" # Можно "GigaChat-Pro" или "GigaChat-Max"
+        gigachat_model: str = "GigaChat"
     ):
         self.context_size = context_size 
         self.temperature = temperature
@@ -60,17 +52,25 @@ class DatasetGenerator:
         self.gigachat_model = gigachat_model
         self.gigachat_client = None
 
-        # ОПРЕДЕЛЯЕМ РЕЖИМ РАБОТЫ
-        # Если сервера не переданы, ставим маркер "gigachat" по умолчанию вместо localhost
         if servers is None:
             self.servers = ["gigachat"]
         else:
             self.servers = servers
 
-        # Если выбран GigaChat, инициализируем его по инструкциям Сбера
+        # Режим GigaChat
         if "gigachat" in self.servers:
-            if not GIGACHAT_AVAILABLE:
-                raise ImportError("Выбран режим GigaChat, но библиотека не установлена. Выполните: pip install gigachat")
+            # ЛЕНИВЫЙ ИМПОРТ: Проверяем и импортируем прямо в момент создания объекта
+            try:
+                from gigachat import GigaChat
+                from gigachat.models import Chat
+                # Делаем GigaMessage глобальным для методов этого класса
+                global GigaMessage
+                from gigachat.models import Message as GigaMessage
+            except ImportError:
+                raise ImportError(
+                    "Выбран режим GigaChat, но библиотека не установлена в текущем окружении. "
+                    "Выполните: pip install gigachat"
+                )
             
             credentials = os.getenv("GIGACHAT_CREDENTIALS")
             if not credentials:
@@ -83,11 +83,8 @@ class DatasetGenerator:
                     raise ValueError("Критическая ошибка: GigaChat Authorization Key не может быть пустым.")
                 os.environ["GIGACHAT_CREDENTIALS"] = credentials
 
-            self.gigachat_client = GigaChat(
-                credentials=credentials, 
-                verify_ssl_certs=False,
-                timeout=self.timeout
-            )
+            # Инициализируем клиент без проверки SSL
+            self.gigachat_client = GigaChat(credentials=credentials, verify_ssl_certs=False, timeout=self.timeout)
             self.logger.info(f"DatasetGenerator инициализирован в режиме GigaChat ({self.gigachat_model})")
         else:
             self.logger.info(f"DatasetGenerator инициализирован в режиме кастомных серверов: {self.servers}")
