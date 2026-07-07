@@ -98,7 +98,7 @@ class DatasetGenerator:
                 "эту задачу, пошагово расписав математическую логику решения, промежуточные преобразования "
                 "и законы. В финальном ответе запишите структурированный результат и конечную формулу. "
                 "Для всех математических символов и формул используйте СТРОГИЙ синтаксис LaTeX.\n"
-                f"Используйте формат: === START_THOUGHT === Ваши рассуждения === END_THOUGHT === === START_OUTPUT === Ваш ответ === END_OUTPUT ===.\n"
+                f"Используйте формат: <Thought> Ваши рассуждения </Thought> <output> Ваш ответ </output>.\n"
                 f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}\n"
                 #"ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ: Пиши логику мышления и выводы исключительно на русском языке!"
             )
@@ -107,7 +107,7 @@ class DatasetGenerator:
                 #"ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
                 "Ты — ведущий научный методолог. Перед тобой фрагмент научной статьи и "
                 "аналитический вопрос к нему. Детально распиши логику рассуждения и дай ответ.\n"
-                f"Используй формат: === START_THOUGHT === Ваши рассуждения === END_THOUGHT === === START_OUTPUT === Ваш ответ === END_OUTPUT ===.\n"
+                f"Используйте формат: <Thought> Ваши рассуждения </Thought> <output> Ваш ответ </output>.\n"
                 f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}\n"
                 #"ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ: Пиши логику мышления и выводы исключительно на русском языке!"
             )
@@ -474,7 +474,14 @@ class DatasetGenerator:
     def _process_translation_pipeline(self, server_url: str, full_response: str) -> str:
         """Разбирает ответ по тегам, переводит англоязычный CoT и output, сохраняя структуру тегов."""
         # Паттерны для поиска блоков с учетом регистра и возможных пробелов
-        thought_match = re.search(r"<Thought>(.*?)</Thought>", full_response, re.DOTALL | re.IGNORECASE)
+        # Находим, где заканчивается перечисление требований в тексте модели, и отрезаем его
+	if "Требование к формату:" in full_response:
+    		clean_response = full_response.split("Требование к формату:", 1)[1]
+	else:
+    		clean_response = full_response
+
+	# Теперь ищем теги в clean_response
+	thought_match = re.search(r"<Thought>(.*?)</Thought>", clean_response, re.DOTALL | re.IGNORECASE)
         output_match = re.search(r"<output>(.*?)</output>", full_response, re.DOTALL | re.IGNORECASE)
 
         if thought_match and output_match:
