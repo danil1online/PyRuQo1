@@ -89,21 +89,22 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
 
 @cli.command()
 @click.option("--input", "-i", "input_path", required=True, help="Папка с PDF-файлами или сборник журналов")
-@click.option("--output", "-o", "output_file", default=None, help="Выходной JSON-файл датасета (по умолчанию: university_thinking_dataset.json / university_math_dataset.json)")
-@click.option("--mode", "-M", "mode", type=click.Choice(["simple", "multi_server", "math"]), default="simple", help="Режим генерации: simple — 1 сервер + гумманитарный текст, multi_server — несколько серверов, math — 1 сервер + математические тексты с LaTeX")
-@click.option("--servers", "-s", "servers", multiple=True, callback=_parse_servers, help="URL серверов llama.cpp (повторяемый флаг: --servers http://a --servers http://b; или через запятую: --servers 'http://a,http://b')")
+@click.option("--output", "-o", "output_file", default=None, help="Выходной JSON-файл датасета")
+@click.option("--mode", "-M", "mode", type=click.Choice(["simple", "math"]), default="simple", help="Режим текста: simple — гуманитарный, math — математический с LaTeX")
+@click.option("--servers", "-s", "servers", multiple=True, callback=_parse_servers, help="URL серверов llama.cpp")
 @click.option("--chunk-size", default=3500, help="Размер чанка в символах")
 @click.option("--overlap", default=500, help="Перекрывание чанков в символах")
 @click.option("--enable-ocr", is_flag=True, default=True, help="Включить OCR для сканов")
 @click.option("--recursive", is_flag=True, default=True, help="Рекурсивный обход папок")
-def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable_ocr, recursive):
-    """Генерация датасета из PDF-файлов через API.
-
-    Примеры:
-      pyruqo1 generate --input ./pdfs --mode simple --servers http://localhost:8079/v1/chat/completions
-      pyruqo1 generate --input ./pdfs --mode math --servers 'http://srv1:8079,http://srv2:8079'
-      pyruqo1 generate --input ./pdfs --mode simple --servers 'http://srv1:8079,http://srv2:8079'
-    """
+@click.option(
+    '--context-size', 
+    type=click.Choice(['2048', '8192']), 
+    default='2048', 
+    help='Целевой размер контекста обучаемой модели (влияет на лаконичность ответов)'
+)
+# ДОБАВЛЕН context_size В АРГУМЕНТЫ ФУНКЦИИ НИЖЕ:
+def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable_ocr, recursive, context_size):
+    """Генерация датасета из PDF-файлов через API."""
     if not output_file:
         output_file = "university_math_dataset.json" if mode == "math" else "university_thinking_dataset.json"
 
@@ -130,10 +131,10 @@ def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable
 
     get_logger().info(f"Сформировано {len(all_chunks)} чанков.")
 
+    # Теперь context_size корректно передается из Click
     from pyruqo1.dataset import DatasetGenerator
-    generator = DatasetGenerator(servers=list(servers))
+    generator = DatasetGenerator(servers=list(servers), context_size=int(context_size))
     generator.generate_from_chunks(all_chunks, output_file, mode=mode)
-
 
 @cli.command()
 @click.option("--input", "-i", "input_path", required=True, help="Путь к PDF-файлу или папке журналов")
