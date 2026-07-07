@@ -475,13 +475,13 @@ class DatasetGenerator:
         """Разбирает ответ по тегам, переводит англоязычный CoT и output, сохраняя структуру тегов."""
         # Паттерны для поиска блоков с учетом регистра и возможных пробелов
         # Находим, где заканчивается перечисление требований в тексте модели, и отрезаем его
-	if "Требование к формату:" in full_response:
-    		clean_response = full_response.split("Требование к формату:", 1)[1]
-	else:
-    		clean_response = full_response
+        if "Требование к формату:" in full_response:
+                clean_response = full_response.split("Требование к формату:", 1)[1]
+        else:
+                clean_response = full_response
 
-	# Теперь ищем теги в clean_response
-	thought_match = re.search(r"<Thought>(.*?)</Thought>", clean_response, re.DOTALL | re.IGNORECASE)
+        # Теперь ищем теги в clean_response
+        thought_match = re.search(r"<Thought>(.*?)</Thought>", clean_response, re.DOTALL | re.IGNORECASE)
         output_match = re.search(r"<output>(.*?)</output>", full_response, re.DOTALL | re.IGNORECASE)
 
         if thought_match and output_match:
