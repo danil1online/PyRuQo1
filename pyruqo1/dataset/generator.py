@@ -98,31 +98,48 @@ class DatasetGenerator:
         output_file: str,
         mode: str = "simple",
     ) -> List[Dict]:
-        """Двухэтапная генерация датасета."""
+        """Главный управляющий метод: координирует двухэтапный процесс генерации."""
         
-        # Настройка системного промпта для Вопросов
+        # 1. ТИПОВЫЕ СИСТЕМНЫЕ ПРОМПТЫ ДЛЯ СОХРАНЕНИЯ В ДАТАСЕТ (Короткие и чистые)
+        if mode == "math":
+            dataset_system_prompt = (
+                "Ты — профессор высшей математики и теоретической физики. Перед тобой сложная "
+                "научно-теоретическая задача. Пошагово распиши математическую логику решения, "
+                "используя синтаксис LaTeX, и дай развернутый академический ответ."
+            )
+        else:
+            dataset_system_prompt = (
+                "Ты — ведущий научный методолог. Перед тобой сложный аналитический вопрос. "
+                "Детально распиши логику рассуждения и дай содержательный, академический ответ."
+            )
+
+        # Настройка системного промпта для Вопросов (Этап 1)
         question_system_prompt = (
             self.DEFAULT_QUESTION_SYSTEM_PROMPT if mode == "simple" else self.MATH_QUESTION_SYSTEM_PROMPT
         )
         
-        # Настройка системного промпта для Ответов (динамическая длина)
+        # Настройка ограничений длины для API
         if self.context_size == 2048:
             length_instruction = "Пиши рассуждения лаконично, ограничь скрытый блок мыслей максимум 2-3 абзацами. Конечный ответ сделай кратким."
-        else: # 8192
+        else:
             length_instruction = "Проведи глубокую декомпозицию вопроса, сопоставь все факты. Разверни подробную цепочку шагов."
 
-        # СТРОГОЕ ТРЕБОВАНИЕ К ФОРМАТУ БЕЗ ПОВТОРЕНИЯ НАЗВАНИЙ ТЕГОВ ТЕКСТОМ
+        # СТРОГОЕ ТРЕБОВАНИЕ К ФОРМАТУ И ПОВЕДЕНИЮ РАССУЖДЕНИЙ
         format_instruction = (
             "Ты ОБЯЗАН структурировать ответ строго с помощью XML-тегов. "
             "Сначала открой тег начала мысли <Thought>, детально распиши логику и закрой тегом конца мысли </Thought>. "
             "Затем открой тег начала вывода <output>, запиши туда итоговый академический ответ и закрой тегом </output>.\n"
-            "КРИТИЧЕСКОЕ ПРАВИЛО: Внутри текста рассуждений никогда не дублируй и не цитируй названия самих этих тегов "
+            "КРИТИЧЕСКОЕ ТРЕБОВАНИЕ К СТИЛЮ РАССУЖДЕНИЙ:\n"
+            "Строий свои размышления в блоке <Thought> так, будто ты отвечаешь из своей фундаментальной памяти и широких экспертных знаний. "
+            "КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать фразы: 'согласно предоставленному фрагменту', 'автор статьи указывает', 'в тексте подчеркивается', 'на основе статьи' и любые их аналоги. "
+            "Представь, что никакого фрагмента перед тобой нет — пиши рассуждения от первого лица как независимый эксперт, аргументируя логические тезисы.\n"
+            "КРИТИЧЕСКОЕ ПРАВИЛО ФОРМАТА: Внутри текста рассуждений никогда не дублируй и не цитируй названия самих этих тегов "
             "в кавычках или в виде примеров, пиши сразу суть анализа!"
         )
 
-        # Модифицируем системные промпты под требования русской локализации и архитектуры тегов
+        # 2. РАБОЧИЕ ДЛИННЫЕ ПРОМПТЫ ДЛЯ ОТПРАВКИ В API GIGACHAT
         if mode == "math":
-            answer_system_prompt = (
+            api_system_prompt = (
                 "ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
                 "Ты — профессор высшей математики и теоретической физики. Перед тобой фрагмент "
                 "научной статьи с формулами в формате LaTeX и математическая задача. Подробно решите "
@@ -131,7 +148,7 @@ class DatasetGenerator:
                 f"ТРЕБОВАНИЕ К РАЗМЕРУ: {length_instruction}"
             )
         else:
-            answer_system_prompt = (
+            api_system_prompt = (
                 "ВНИМАНИЕ: Все рассуждения и весь ответ должны быть СТРОГО НА РУССКОМ ЯЗЫКЕ. Использование английского языка запрещено.\n"
                 "Ты — ведущий научный методолог. Перед тобой фрагмент научной статьи и аналитический вопрос к нему. "
                 "Детально распиши логику рассуждения и дай ответ.\n"
@@ -149,8 +166,10 @@ class DatasetGenerator:
         questions = self._generate_questions(chunks, question_system_prompt, output_file, user_prompt_template)
         self.logger.info(f"Этап 1 завершён. Сгенерировано {len(questions)} вопросов.")
 
-        # Этап 2: генерация ответов
-        dataset_rows = self._generate_answers(chunks, questions, answer_system_prompt, output_file, user_prompt_template)
+        # Этап 2: генерация ответов. ПЕРЕДАЕМ И РАБОЧИЙ ПРОМПТ ДЛЯ API, И ЧИСТЫЙ ПРОМПТ ДЛЯ СОХРАНЕНИЯ В JSON
+        dataset_rows = self._generate_answers(
+            chunks, questions, api_system_prompt, dataset_system_prompt, output_file, user_prompt_template
+        )
 
         # Удаляем временный файл вопросов
         tmp_file = output_file + ".tmp_questions"
@@ -296,21 +315,23 @@ class DatasetGenerator:
         self, 
         chunks: List[str], 
         questions: Dict[int, str], 
-        system_prompt: str, 
+        api_system_prompt: str, 
+        dataset_system_prompt: str, # Принимаем чистый промпт
         output_file: str, 
         user_prompt_template: str
     ) -> List[Dict]:
-        """Точка входа для Этапа 2. Проверяет, работаем ли мы с GigaChat."""
+        """Точка входа для Этапа 2. Маршрутизирует генерацию CoT-ответов."""
         if "gigachat" not in self.servers:
-            return self._generate_answers_servers(chunks, questions, system_prompt, output_file, user_prompt_template)
+            # Если работаем с кастомными серверами, прокидываем логику туда (при необходимости)
+            return self._generate_answers_servers(chunks, questions, api_system_prompt, output_file, user_prompt_template)
 
         # Режим GigaChat для ответов
         dataset_rows = []
-        with ThreadPoolExecutor(max_workers=1) as executor: # Ответы генерируем строго в 1 поток из-за тяжести запросов
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures = {
                 executor.submit(
                     self._query_gigachat, 
-                    system_prompt, 
+                    api_system_prompt, # Модели отправляем сложный длинный промпт с инструкциями
                     f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\nВопрос: {questions[i]}", 
                     max_tokens=self.max_tokens
                 ): i
@@ -321,8 +342,9 @@ class DatasetGenerator:
                 try:
                     full_response = future.result()
                     if full_response:
+                        # В ДАТАСЕТ сохраняем ЧИСТЫЙ, короткий системный промпт
                         dataset_rows.append({
-                            "system": system_prompt,
+                            "system": dataset_system_prompt, 
                             "prompt": questions[idx],
                             "response": full_response,
                         })

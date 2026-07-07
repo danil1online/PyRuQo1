@@ -55,6 +55,8 @@ pyruqo1 generate --input ./math_pdfs --mode math --servers 'http://localhost:807
 - Повторяемый флаг: `--servers http://a --servers http://b`
 - Один флаг с разделителем: `--servers 'http://a,http://b'`
 
+Если серверы не заданы, будет выполнена попытка обратиться к GigaChat. Пользователь должен будет ввести `GigaChat Authorization Key (Client Secret)`. Данный режим реализован ввиду того, что reasoning-self-hosted модели, у которых можно учиться рассуждениям, сами рассуждения генерируют на английском языке. GigaChat не показывает рассуждений. В скриптах реализована принудительная имитация `Thought` и `output`. 
+
 Режимы:
 - `simple` — 1 сервер + гуманитарный текст (PDFParser)
 - `math` — 1 сервер + математические тексты с LaTeX (Marker-парсер)
@@ -73,6 +75,10 @@ pyruqo1 mixds university_thinking_dataset.json university_math_dataset.json --mo
 **В два файла (train + val):**
 ```bash
 pyruqo1 mixds university_thinking_dataset.json university_math_dataset.json --mode train_val
+```
+или можно
+```bash
+pyruqo1 mixds university_thinking_dataset.json --mode train_val
 ```
 
 ### 7. Обучение
