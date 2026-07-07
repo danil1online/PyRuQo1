@@ -433,28 +433,35 @@ class DatasetGenerator:
         """Синхронно переводит текст на русский язык, бережно сохраняя Markdown-структуру."""
         if not text.strip() or not self._needs_translation(text):
             return text
+            
+        # --- МАСКИРОВАНИЕ ТЕГОВ ПЕРЕД ПЕРЕВОДОМ ---
+        # Заменяем теги, которые модель цитирует внутри текста, на безопасные маркеры
+        safe_text = text.replace("<Thought>", "=== START_THOUGHT ===")
+        safe_text = safe_text.replace("</Thought>", "=== END_THOUGHT ===")
+        safe_text = safe_text.replace("<output>", "=== START_OUTPUT ===")
+        safe_text = safe_text.replace("</output>", "=== END_OUTPUT ===")
 
         system_prompt = (
             "Ты — профессиональный ИИ-переводчик научных публикаций и логов рассуждений (Chain-of-Thought). "
             "Переведи предоставленный текст на русский язык. "
             "КРИТИЧЕСКИ ВАЖНО: сохраняй структуру Markdown, списки, жирный текст (например, **Analyze Input:**), "
-            "маркеры пунктов (1., 2., -) и формулы LaTeX в исходном виде. Переводи только сам текст описания. "
+            "маркеры пунктов (1., 2., -), формулы LaTeX и маркеры структуры (=== START_THOUGHT ===, === END_THOUGHT ===, "
+            "=== START_OUTPUT ===, === END_OUTPUT ===) в исходном виде. Переводи только сам текст описания. "
             "Выведи ТОЛЬКО чистый перевод, без каких-либо твоих вводных слов и комментариев.\n"
             "CRITICAL: Do not internalize thoughts. Do not use reasoning. "
             "Do NOT output <think> tags. Provide the final translation immediately."
         )
-
+        
         payload = {
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Переведи этот научно-аналитический текст на русский язык, строго сохраняя разметку:\n\n{text}"}
+                {"role": "user", "content": f"Переведи этот научно-аналитический текст на русский язык, строго сохраняя разметку:\n\n{safe_text}"}
             ],
-            "temperature": 0.1,  # Минимальная температура для точности перевода
+            "temperature": 0.1, 
             "max_tokens": 3500,
             "reasoning_budget": 0,
             "thinking_budget_tokens": 0
         }
-
         try:
             response = requests.post(
                 server_url,
@@ -464,12 +471,20 @@ class DatasetGenerator:
             )
             if response.status_code == 200:
                 result_json = response.json()
-                # ИСПРАВЛЕНО: choices — это список, берем первый элемент по индексу 0
                 choice = result_json["choices"][0]["message"]
-                return choice.get("content", "").strip()
+                translated_text = choice.get("content", "").strip()
+                
+                # --- РАЗМАСКИРОВАНИЕ ТЕГОВ ПОСЛЕ ПЕРЕВОДА ---
+                # Возвращаем назад исходные теги для сохранения в датасет
+                translated_text = translated_text.replace("=== START_THOUGHT ===", "<Thought>")
+                translated_text = translated_text.replace("=== END_THOUGHT ===", "</Thought>")
+                translated_text = translated_text.replace("=== START_OUTPUT ===", "<output>")
+                translated_text = translated_text.replace("=== END_OUTPUT ===", "</output>")
+                
+                return translated_text
         except Exception as e:
             self.logger.warning(f"Ошибка перевода блока на сервере {server_url}: {e}")
-        return text
+            return text
 
     def _process_translation_pipeline(self, server_url: str, full_response: str) -> str:
         """Разбирает ответ по тегам, переводит англоязычный CoT и output, сохраняя структуру тегов."""
