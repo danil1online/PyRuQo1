@@ -386,7 +386,7 @@ class DatasetGenerator:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.3,
+            "temperature": 0.6,
             "max_tokens": target_max_tokens,
             # Здесь МЫСЛИ НУЖНЫ, поэтому бюджет не ограничиваем
         }
@@ -419,6 +419,78 @@ class DatasetGenerator:
             self.logger.warning(f"Ошибка запроса к {server_url} (этап 2): {e}")
         return None
 
+    def _needs_translation(self, text: str, threshold: float = 0.3) -> bool:
+        """Проверяет, превышает ли процент английских букв заданный порог."""
+        if not text:
+            return False
+        letters = [c for c in text if c.isalpha()]
+        if not letters:
+            return False
+        eng_letters = sum(1 for c in letters if c.lower() in 'abcdefghijklmnopqrstuvwxyz')
+        return (eng_letters / len(letters)) > threshold
+
+    def _translate_block(self, server_url: str, text: str) -> str:
+        """Переводит конкретный текстовый блок на русский язык БЕЗ рассуждений."""
+        if not text.strip() or not self._needs_translation(text):
+            return text
+
+        system_prompt = (
+            "Ты — профессиональный переводчик научных и технических текстов. "
+            "Переведи предоставленный текст на русский язык. "
+            "Сохраняй исходное Markdown-оформление, списки и формулы LaTeX в неизменном виде. "
+            "Выведи ТОЛЬКО чистый перевод, без твоих комментариев.\n"
+            "CRITICAL: Do not internalize thoughts. Do not use reasoning. "
+            "Do NOT output <think> tags. Provide the final translation immediately."
+        )
+
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Переведи этот текст на русский язык:\n\n{text}"}
+            ],
+            "temperature": 0.1,  # Низкая температура для точного перевода
+            "max_tokens": 3000,
+            "reasoning_budget": 0,       # Отключаем мыслительный процесс сервера
+            "thinking_budget_tokens": 0  # Для совместимости версий
+        }
+
+        try:
+            response = requests.post(
+                server_url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=self.timeout,
+            )
+            if response.status_code == 200:
+                result_json = response.json()
+                return result_json["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            self.logger.warning(f"Ошибка перевода на сервере {server_url}: {e}")
+        return text  # Если упало, возвращаем оригинал
+
+    def _process_translation_pipeline(self, server_url: str, full_response: str) -> str:
+        """Разбирает ответ по тегам, переводит англоязычные части и собирает обратно."""
+        # Извлекаем текст внутри <Thought> и <output>
+        thought_match = re.search(r"<Thought>(.*?)</Thought>", full_response, re.DOTALL)
+        output_match = re.search(r"<output>(.*?)</output>", full_response, re.DOTALL)
+
+        # Если структура тегов стандартная
+        if thought_match and output_match:
+            thought_text = thought_match.group(1).strip()
+            output_text = output_match.group(1).strip()
+
+            # Переводим каждый блок отдельно, если в нем много английского
+            translated_thought = self._translate_block(server_url, thought_text)
+            translated_output = self._translate_block(server_url, output_text)
+
+            return f"<Thought>\n{translated_thought}\n</Thought>\n<output>\n{translated_output}\n</output>"
+        
+        # Если тегов нет (сплошной текст), проверяем и перевод им целиком
+        if self._needs_translation(full_response):
+            return self._translate_block(server_url, full_response)
+            
+        return full_response
+
     def _generate_answer_row(
         self,
         server_url: str,
@@ -426,22 +498,23 @@ class DatasetGenerator:
         system_prompt: str,
         user_prompt: str,
     ) -> Optional[Dict]:
-        """Собирает финальную строку для датасета."""
+        """Собирает финальную строку для датасета и переводит её при необходимости."""
         full_response = self._query_answer(server_url, system_prompt, user_prompt)
         if full_response:
-            # Если по какой-то причине пришел список или кортеж (например, [1, "Вопрос..."])
+            # Очистка вопроса
             if isinstance(question, (list, tuple)):
-                # Берем последний элемент, где гарантированно лежит текст вопроса
                 clean_question = question[-1]
             else:
                 clean_question = question
-                
-            # Дополнительно очищаем от случайных лишних кавычек по краям текста
             clean_question = str(clean_question).strip().strip('"').strip("'")
+            
+            # --- ЭТАП 3: ПОСТ-ОБРАБОТКА И ПЕРЕВОД ---
+            # Проверяем и при необходимости переводим внутренности блоков на русский язык
+            final_response = self._process_translation_pipeline(server_url, full_response)
             
             return {
                 "system": system_prompt,
-                "prompt": clean_question,  # Теперь здесь строго строка с вопросом
-                "response": full_response,
+                "prompt": clean_question,
+                "response": final_response,
             }
         return None
