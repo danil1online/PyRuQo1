@@ -316,14 +316,16 @@ class DatasetGenerator:
         chunks: List[str], 
         questions: Dict[int, str], 
         api_system_prompt: str, 
-        dataset_system_prompt: str, # Принимаем чистый промпт
+        dataset_system_prompt: str,  # Добавили сюда
         output_file: str, 
         user_prompt_template: str
     ) -> List[Dict]:
         """Точка входа для Этапа 2. Маршрутизирует генерацию CoT-ответов."""
         if "gigachat" not in self.servers:
-            # Если работаем с кастомными серверами, прокидываем логику туда (при необходимости)
-            return self._generate_answers_servers(chunks, questions, api_system_prompt, output_file, user_prompt_template)
+            # Передаем все аргументы дальше в метод серверов
+            return self._generate_answers_servers(
+                chunks, questions, api_system_prompt, dataset_system_prompt, output_file, user_prompt_template
+            )
 
         # Режим GigaChat для ответов
         dataset_rows = []
@@ -331,7 +333,7 @@ class DatasetGenerator:
             futures = {
                 executor.submit(
                     self._query_gigachat, 
-                    api_system_prompt, # Модели отправляем сложный длинный промпт с инструкциями
+                    api_system_prompt, 
                     f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\nВопрос: {questions[i]}", 
                     max_tokens=self.max_tokens
                 ): i
@@ -342,9 +344,8 @@ class DatasetGenerator:
                 try:
                     full_response = future.result()
                     if full_response:
-                        # В ДАТАСЕТ сохраняем ЧИСТЫЙ, короткий системный промпт
                         dataset_rows.append({
-                            "system": dataset_system_prompt, 
+                            "system": dataset_system_prompt, # Чистый короткий промпт идет в датасет
                             "prompt": questions[idx],
                             "response": full_response,
                         })
@@ -359,7 +360,8 @@ class DatasetGenerator:
         self, 
         chunks: List[str], 
         questions: Dict[int, str], 
-        system_prompt: str, 
+        api_system_prompt: str, 
+        dataset_system_prompt: str,  # Добавили сюда для совместимости
         output_file: str, 
         user_prompt_template: str
     ) -> List[Dict]:
@@ -376,7 +378,15 @@ class DatasetGenerator:
             try:
                 question = questions[idx]
                 user_prompt = f"{user_prompt_template}\n\"\"\"\n{chunk}\n\"\"\"\n\nВопрос: {question}"
-                row = self._generate_answer_row_server(server, question, system_prompt, user_prompt)
+                # Для локальных серверов по-прежнему используем api_system_prompt, 
+                # либо можете заменить его на dataset_system_prompt в зависимости от задач обучения
+                row = self._generate_answer_row_server(server, question, api_system_prompt, user_prompt)
+                
+                # Если хотите, чтобы и для локальных серверов в JSON шел короткий промпт,
+                # подменяем его прямо здесь перед возвратом:
+                if row:
+                    row["system"] = dataset_system_prompt
+                    
                 return idx, row
             finally:
                 server_queue.put(server)
