@@ -64,8 +64,8 @@
 
 Порядок запуска "базового скрипта":
 ```bash
-git clone http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
-cd o1_gigachat-20b-a3b_lora_npi
+git clone https://github.com/danil1online/PyRuQo1.git
+cd PyRuQo1
 python3.10 -m venv env
 source env/bin/activate
 pip install -r examples_scripts/requirements-train.txt
@@ -453,8 +453,8 @@ ExecStart=/home/user/nextcloud/llama.cpp/build/bin/llama-server -m /home/user/ne
 
  1.2. Установка Python-зависимостей репозитория
  ```bash
- git clone http://195.133.13.56/danil1online/o1_gigachat-20b-a3b_lora_npi.git
- cd o1_gigachat-20b-a3b_lora_npi
+ git clone https://github.com/danil1online/PyRuQo1.git
+ cd PyRuQo1
  python3.10 -m venv dsenv
  source dsenv/bin/activate
  pip install -r examples_scripts/requirements-ds.txt
