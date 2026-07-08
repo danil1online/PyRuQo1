@@ -300,9 +300,17 @@ llama-cpp-python с поддержкой CUDA (устанавливается и
 pyruqo1 merge --model gigachat-20b --manage-swap
 ```
 
+## Минимальные технические требования
+
+- Ubuntu 22.04
+- 64 RAM
+- 24 VRAM
+
 ## Подробнее
 
-Подробная документация, пошаговое руководство и примеры результатов — в [EXAMPLESINFO.md](EXAMPLESINFO.md).
+- Подробная документация, пошаговое руководство и примеры результатов — в [EXAMPLESINFO.md](EXAMPLESINFO.md).
+- Запуск local-host-llm в [LOCALHOSTLLM.md](LOCALHOSTLLM.md)
+
 
 ## License
 
