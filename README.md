@@ -358,7 +358,7 @@ gguf:
 pyruqo1 train --model merged_step1 --train-file university_train.json
 ```
 
-Получаем уже SFT-адаптер и если нужно повторяем шаги `merge` - `gguf` - `test`.
+Получаем уже SFT-адаптер в `./merged_o1_gigachat3_university` и если нужно повторяем шаги `merge` - `gguf` - `test`.
 
 ## CLI
 
