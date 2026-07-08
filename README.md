@@ -292,7 +292,7 @@ pyruqo1 merge --model gigachat3-10b --lora-dir ./o1_gigachat3_university_lora --
 
 Далее используем `cpt_merged_model` как базовую модель для SFT.
 
-**12d. Создаем configs/merged_step1.yaml на основе конфига реальной базовой модели. 
+**12d. Создаем configs/merged_step1.yaml на основе конфига реальной базовой модели.**
 ```bash
 nano configs/merged_step1.yaml
 ```
@@ -353,7 +353,7 @@ gguf:
 ```
 
 
-**12e. Обучение:
+**12e. Обучение:**
 ```bash
 pyruqo1 train --model merged_step1 --train-file university_train.json
 ```
