@@ -18,7 +18,7 @@ PDF_FOLDER = "./university_pdfs" # Положите сюда ваши PDF
 # ПОЛНЫЕ ИСПРАВЛЕННЫЕ АДРЕСА СЕРВЕРОВ llama.cpp
 SERVERS_POOL = [
     "http://192.168.2.52:8079/v1/chat/completions",
-    "http://195.63.145.3:8181/v1/chat/completions"
+    "http://192.168.145.3:8181/v1/chat/completions"
 ]
 
 # Потокобезопасная очередь для свободных серверов
