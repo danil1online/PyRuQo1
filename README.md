@@ -287,7 +287,7 @@ pyruqo1 train --model gigachat3-10b --train-type cpt --train-file cpt_dataset.js
 
 **12c. Merge CPT-адаптера с базовой моделью:**
 ```bash
-pyruqo1 merge --model gigachat-20b --lora-dir ./o1_gigachat_university_lora --output-dir ./cpt_merged_model
+pyruqo1 merge --model gigachat-20b --lora-dir ./o1_gigachat3_university_lora --output-dir ./cpt_merged_model
 ```
 
 Далее используем `cpt_merged_model` как базовую модель для SFT.
