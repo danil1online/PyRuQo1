@@ -158,7 +158,7 @@ cmake -B build -DGGML_CUDA=ON
 cmake --build build --config Release -j$(nproc)
 
 # Установка зависимостей конвертера. Сначала отключаем текущее окружение, потом создаем новое и ставим все в него
-python3.10 -m venv llamacppenv
+python3 -m venv llamacppenv
 source llamacppenv/bin/activate
 pip3 install -r requirements.txt
 
