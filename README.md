@@ -292,7 +292,12 @@ pyruqo1 merge --model gigachat3-10b --lora-dir ./o1_gigachat3_university_lora --
 
 Далее используем `cpt_merged_model` как базовую модель для SFT.
 
-**12d. Создаем configs/merged_step1.yaml на основе конфига реальной базовой модели. В данном примере это была gigachat3-10b. Для нее:
+**12d. Создаем configs/merged_step1.yaml на основе конфига реальной базовой модели. 
+```bash
+nano configs/merged_step1.yaml
+```
+
+В данном примере это была gigachat3-10b. Для нее:
 ```sh
 model:
   name: "./cpt_merged_model"
@@ -344,15 +349,16 @@ gguf:
   quantization: "Q4_K_M"
   output_dir: "./gguf"
   use_mlock: false
-  vocab_only: false```
+  vocab_only: false
+```
 
 
 **12e. Обучение:
 ```bash
-pyruqo1 train --model merged_step1 --train-file university_base_dataset.json
+pyruqo1 train --model merged_step1 --train-file university_train.json
 ```
 
-Получаем уже SFT-адаптер и если нужно повторяем шаги merge - gguf - test.
+Получаем уже SFT-адаптер и если нужно повторяем шаги `merge` - `gguf` - `test`.
 
 ## CLI
 
