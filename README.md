@@ -121,12 +121,12 @@ pyruqo1 split --input ./raw_journals --output-dir ./university_pdfs
 
 **7b. Генерация Base-датасета (гуманитарный):**
 ```bash
-pyruqo1 generate --input ./university_pdfs --mode base --base-hum
+pyruqo1 generate --input ./university_pdfs --mode base-hum
 ```
 
 **7c. Генерация Base-датасета (математический):**
 ```bash
-pyruqo1 generate --input ./university_pdfs --mode base --base-math
+pyruqo1 generate --input ./university_pdfs --mode base-math
 ```
 
 **7d. Обучение:**

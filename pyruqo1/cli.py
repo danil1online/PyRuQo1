@@ -89,7 +89,7 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
 @cli.command()
 @click.option("--input", "-i", "input_path", required=True, help="Папка с PDF-файлами или сборник журналов")
 @click.option("--output", "-o", "output_file", default=None, help="Выходной JSON-файл датасета")
-@click.option("--mode", "-M", "mode", type=click.Choice(["simple", "math", "cpt", "base"]), default="simple", help="Режим текста: simple — гуманитарный, math — математический с LaTeX, cpt — сырой текст для continual pre-training, base — структура статьи (введение→prompt, методы+результаты→thoughts, выводы→output)")
+@click.option("--mode", "-M", "mode", type=click.Choice(["simple", "math", "cpt", "base-hum", "base-math"]), default="simple", help="Режим текста: simple — гуманитарный, math — математический с LaTeX, cpt — сырой текст для continual pre-training, base-hum/base-math — структура статьи (введение→prompt, методы+результаты→thoughts, выводы→output)")
 @click.option("--servers", "-s", "servers", multiple=True, callback=_parse_servers, help="URL серверов llama.cpp")
 @click.option("--chunk-size", default=3500, help="Размер чанка в символах")
 @click.option("--overlap", default=500, help="Перекрывание чанков в символах")
@@ -101,17 +101,15 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
     default='2048', 
     help='Целевой размер контекста обучаемой модели (влияет на лаконичность ответов)'
 )
-@click.option("--base-hum", is_flag=True, default=False, help="Base-режим: гуманитарный системный промпт (социолог-экономист)")
-@click.option("--base-math", is_flag=True, default=False, help="Base-режим: математический системный промпт (математика, физика, информатика)")
 # ДОБАВЛЕН context_size В АРГУМЕНТЫ ФУНКЦИИ НИЖЕ:
-def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable_ocr, recursive, context_size, base_hum, base_math):
+def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable_ocr, recursive, context_size):
     """Генерация датасета из PDF-файлов через API."""
     if not output_file:
         if mode == "math":
             output_file = "university_math_dataset.json"
         elif mode == "cpt":
             output_file = "university_cpt_dataset.json"
-        elif mode == "base":
+        elif mode in ("base-hum", "base-math"):
             output_file = "university_base_dataset.json"
         else:
             output_file = "university_thinking_dataset.json"
@@ -126,7 +124,7 @@ def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable
         from pyruqo1.dataset import MathParser, MathChunker
         parser = MathParser(chunk_size=chunk_size, overlap=overlap)
         chunker = MathChunker(chunk_size=chunk_size, overlap=overlap)
-    elif mode == "base":
+    elif mode in ("base-hum", "base-math"):
         from pyruqo1.dataset import BaseParser
         parser = BaseParser(chunk_size=chunk_size, overlap=overlap)
     else:
@@ -138,8 +136,8 @@ def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable
         get_logger().error(f"Директория не найдена: {input_path}")
         return
 
-    if mode == "base":
-        _save_base_dataset(parser, input_dir, recursive, output_file, base_hum, base_math)
+    if mode in ("base-hum", "base-math"):
+        _save_base_dataset(parser, input_dir, recursive, output_file, mode)
     elif mode == "cpt":
         texts = parser.parse_folder(str(input_dir), recursive=recursive)
 
@@ -164,16 +162,14 @@ def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable
         generator.generate_from_chunks(all_chunks, output_file, mode=mode)
 
 
-def _save_base_dataset(parser, input_dir, recursive, output_file, base_hum, base_math):
+def _save_base_dataset(parser, input_dir, recursive, output_file, mode):
     """Генерация SFT-датасета из структуры статей (введение→prompt, методы+результаты→thoughts, выводы→output)."""
     import json
 
-    if base_hum:
+    if mode == "base-hum":
         system_prompt = "Ты ученый социолог-экономист. Проанализируй задачу и реши ее."
-    elif base_math:
-        system_prompt = "Ты ученый в области математики, физики, техники и информатики. Проанализируй задачу и реши ее."
     else:
-        system_prompt = "Ты ученый. Проанализируй задачу и реши ее."
+        system_prompt = "Ты ученый в области математики, физики, техники и информатики. Проанализируй задачу и реши ее."
 
     sections_list = parser.parse_folder(str(input_dir), recursive=recursive)
 
