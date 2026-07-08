@@ -72,3 +72,13 @@ class MathChunker:
 
     def chunk(self, text: str) -> List[str]:
         return self._formula_safe_chunks(text)
+
+
+class CPTChunker:
+    """Нарезка сырого текста на чанки для CPT с защитой формул LaTeX."""
+
+    def __init__(self, chunk_size: int = 3500, overlap: int = 500):
+        self.chunker = MathChunker(chunk_size=chunk_size, overlap=overlap)
+
+    def chunk(self, text: str) -> List[str]:
+        return self.chunker.chunk(text)

@@ -79,7 +79,64 @@ pyruqo1 generate --input ./math_pdfs --mode math --servers 'http://localhost:807
 - для большой модели gigachat-20b на VRAM 24 Gb большой контекст невозможен, поэтому `--context-size 2048` (задан по умолчанию)
 - для моделей gigachat3-10b, ygpt-5-lite-8b используется второй вариант `--context-size 8192`
 
-### 6. Объединение датасетов
+### 6. Continual Pre-Training (CPT) — опционально
+
+CPT дообучает модель на сыром доменном тексте (статьи из журналов) перед SFT.
+
+**6a. Разрезание журналов:**
+```bash
+pyruqo1 split --input ./raw_journals --output-dir ./university_pdfs
+```
+
+**6b. Генерация CPT-датасета (сырой текст с LaTeX через marker-pdf):**
+```bash
+pyruqo1 generate --input ./university_pdfs --mode cpt --output cpt_dataset.json
+```
+
+**6c. CPT-обучение (LoRA rank=64, lr=1e-4, cosine scheduler):**
+```bash
+pyruqo1 train --model gigachat-20b --train-type cpt --train-file cpt_dataset.json
+```
+
+**6d. Merge CPT-адаптера с базовой моделью:**
+```bash
+pyruqo1 merge --model gigachat-20b --lora-dir ./o1_gigachat_university_lora --output-dir ./cpt_merged_model
+```
+
+Далее используйте `cpt_merged_model` как базовую модель для SFT (см. шаг 7 ниже).
+
+### 7. SFT из структуры статей (Base)
+
+Base-режим извлекает разделы статьи и формирует SFT-датасет без LLM:
+- **Введение + Цель** → `prompt`
+- **Материалы и методы + Результаты** → `<Thought>` (каждый абзац отдельный)
+- **Выводы / Заключение** → `<output>`
+
+Стандартная статья: УДК → Авторы → Организация → Аннотация → Ключевые слова → **Введение** → **Цель** → **Материалы и методы** → **Результаты** → **Выводы** → Список литературы.
+
+**7a. Разрезание журналов:**
+```bash
+pyruqo1 split --input ./raw_journals --output-dir ./university_pdfs
+```
+
+**7b. Генерация Base-датасета (гуманитарный):**
+```bash
+pyruqo1 generate --input ./university_pdfs --mode base --base-hum
+```
+
+**7c. Генерация Base-датасета (математический):**
+```bash
+pyruqo1 generate --input ./university_pdfs --mode base --base-math
+```
+
+**7d. Обучение:**
+```bash
+pyruqo1 train --model gigachat-20b --train-file university_base_dataset.json
+```
+
+> **Примечание:** Статьи без разделов "Введение" или "Выводы/Заключение" пропускаются.
+
+### 8. Объединение датасетов
 
 **В один файл:**
 ```bash
@@ -95,7 +152,7 @@ pyruqo1 mixds university_thinking_dataset.json university_math_dataset.json --mo
 pyruqo1 mixds university_thinking_dataset.json --mode train_val
 ```
 
-### 7. Обучение
+### 9. Обучение
 
 **По одному файлу (university_train.json из корня):**
 ```bash
@@ -129,7 +186,7 @@ pyruqo1 train --model gigachat-20b --mode train_val --train-file university_trai
 Для микро-датасета чекпоинты сохраняются раз в эпоху, логирование и валидация — каждые 2 шага (так как эпоха короткая).
 Для большого датасета — чекпоинты каждые 100 шагов, логирование каждые 10, валидация каждые 50 шагов.
 
-### 8. Слияние LoRA
+### 10. Слияние LoRA
 
 ```bash
 pyruqo1 merge --model gigachat-20b --lora-dir ./o1_gigachat_university_lora --output-dir ./merged_o1_gigachat_university_lora
@@ -171,7 +228,7 @@ python3 convert_hf_to_gguf.py ../merged_o1_gigachat_university_lora --outfile ..
 # В корневой директории появится готовый к локальному инференсу файл o1_gigachat_university_Q4_K_M.gguf размером около 13–14 ГБ
 ```
 
-### 10. Тестирование GGUF
+### 11. Тестирование GGUF
 
 ```bash
 # Деактивируем llamacppenv (если нужно)
@@ -233,6 +290,68 @@ generator = DatasetGenerator(servers=["http://localhost:8079/v1/chat/completions
 generator.generate_from_chunks(chunks, "dataset.json", mode="simple")
 ```
 
+**CPT (Continual Pre-Training) через Python API:**
+
+```python
+from pyruqo1.dataset import CPTParser, CPTChunker
+
+parser = CPTParser(chunk_size=3500, overlap=500)
+chunks = parser.parse_folder("./pdfs")
+
+chunker = CPTChunker(chunk_size=3500, overlap=500)
+raw_texts = []
+for chunk in chunks:
+    raw_texts.extend(chunker.chunk(chunk))
+
+import json
+cpt_data = [{"text": t} for t in raw_texts]
+with open("cpt_dataset.json", "w", encoding="utf-8") as f:
+    json.dump(cpt_data, f, ensure_ascii=False, indent=4)
+```
+
+**Base (SFT из структуры статьи) через Python API:**
+
+```python
+from pyruqo1.dataset import BaseParser
+
+parser = BaseParser(chunk_size=3500, overlap=500)
+sections_list = parser.parse_folder("./pdfs")
+
+import json
+
+dataset_rows = []
+for sections in sections_list:
+    prompt_text = sections.get("introduction", "").strip()
+    conclusion_text = sections.get("conclusion", "").strip()
+
+    if not prompt_text or not conclusion_text:
+        continue
+
+    methods_paragraphs = sections.get("methods", [])
+    results_paragraphs = sections.get("results", [])
+
+    thought_parts = []
+    for paragraph in methods_paragraphs:
+        p = paragraph.strip()
+        if p:
+            thought_parts.append(f"<Thought>\n{p}\n</Thought>")
+    for paragraph in results_paragraphs:
+        p = paragraph.strip()
+        if p:
+            thought_parts.append(f"<Thought>\n{p}\n</Thought>")
+
+    response_text = "\n\n".join(thought_parts) + f"\n\n<output>\n{conclusion_text}\n</output>"
+
+    dataset_rows.append({
+        "system": "Ты ученый. Проанализируй задачу и реши ее.",
+        "prompt": prompt_text,
+        "response": response_text,
+    })
+
+with open("base_dataset.json", "w", encoding="utf-8") as f:
+    json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
+```
+
 ```python
 from pyruqo1.merge import LORAMerger
 from pyruqo1.utils.swap import get_managed_swap_path, remove_swap_file
@@ -254,7 +373,14 @@ pyruqo1/                   # основная библиотека
 ├── config/            # YAML-конфиги моделей
 ├── utils/             # логгер, системные утилиты, swap
 ├── dataset/           # парсинг, чанкинг, генерация датасета
-├── training/          # QLoRA-обучение
+│   ├── parser.py      # PDFParser (простой текст)
+│   ├── math_parser.py # MathParser (LaTeX через marker)
+│   ├── cpt_parser.py  # CPTParser (сырой текст для CPT)
+│   ├── base_parser.py # BaseParser (структура статьи для SFT)
+│   ├── chunker.py     # TextChunker, MathChunker, CPTChunker
+│   ├── generator.py   # DatasetGenerator (SFT-генерация)
+│   └── splitter.py    # JournalSplitter
+├── training/          # QLoRA-обучение (SFT + CPT)
 ├── merge/             # слияние LoRA
 ├── gguf/              # тестирование GGUF-моделей
 └── cli.py             # CLI (click)

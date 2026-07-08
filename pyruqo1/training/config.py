@@ -2,12 +2,14 @@ import torch
 from transformers import TrainingArguments
 from trl import SFTConfig
 
-def build_training_args(config: dict, dataset_type: str = "big", do_eval: bool = True) -> SFTConfig:
+def build_training_args(config: dict, dataset_type: str = "big", do_eval: bool = True, train_type: str = "sft") -> SFTConfig:
     """Сборка SFTConfig из YAML-конфига.
 
-    dataset_type: "micro" — микро-датасет (few-shot, epoch-чеки),
-                  "big" — большой датасет (steps-чеки).
-    do_eval: False — отключить валидацию (например, при обучении по одному файлу).
+    dataset_type: "micro" -- микро-датасет (few-shot, epoch-чеки),
+                  "big" -- большой датасет (steps-чеки).
+    train_type: "sft" -- instruction fine-tuning,
+                "cpt" -- continual pre-training.
+    do_eval: False -- отключить валидацию (например, при обучении по одному файлу).
     """
     training = config.get("training", {})
     dataset = config.get("dataset", {})
@@ -23,11 +25,22 @@ def build_training_args(config: dict, dataset_type: str = "big", do_eval: bool =
         logging_steps = 10
         eval_steps = 50
 
+    # CPT использует другие гиперпараметры
+    if train_type == "cpt":
+        cpt_cfg = config.get("cpt", {})
+        learning_rate = cpt_cfg.get("learning_rate", 1.0e-4)
+        lr_scheduler_type = cpt_cfg.get("lr_scheduler_type", "cosine")
+        warmup_ratio = cpt_cfg.get("warmup_ratio", 0.05)
+    else:
+        learning_rate = training.get("learning_rate", 2e-4)
+        lr_scheduler_type = training.get("lr_scheduler_type", "constant")
+        warmup_ratio = training.get("warmup_ratio", 0.03)
+
     args = {
         "output_dir": training.get("output_dir", "./output"),
         "per_device_train_batch_size": training.get("per_device_train_batch_size", 1),
         "gradient_accumulation_steps": training.get("gradient_accumulation_steps", 8),
-        "learning_rate": training.get("learning_rate", 2e-4),
+        "learning_rate": learning_rate,
         "logging_steps": logging_steps,
         "num_train_epochs": training.get("num_train_epochs", 1),
         "optim": training.get("optim", "paged_adamw_32bit"),
@@ -35,8 +48,8 @@ def build_training_args(config: dict, dataset_type: str = "big", do_eval: bool =
         "fp16": training.get("fp16", False),
         "bf16": training.get("bf16", True),
         "max_grad_norm": training.get("max_grad_norm", 0.3),
-        "warmup_ratio": training.get("warmup_ratio", 0.03),
-        "lr_scheduler_type": training.get("lr_scheduler_type", "constant"),
+        "warmup_ratio": warmup_ratio,
+        "lr_scheduler_type": lr_scheduler_type,
         "save_strategy": save_strategy,
         "save_steps": save_steps,
         "report_to": training.get("report_to", "none"),

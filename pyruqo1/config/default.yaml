@@ -37,6 +37,13 @@ dataset:
   train_file: "university_train.json"
   val_file: "university_val.json"
 
+cpt:
+  rank: 64
+  lora_alpha: 128
+  learning_rate: 1.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+
 merge:
   low_ram: false
   cpu_swap_gb: 40

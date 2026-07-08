@@ -71,26 +71,45 @@ class NPITrainer:
                     module.to(torch.bfloat16)
 
     def _setup_lora(self):
-        lora_cfg = self.config.get("lora", {})
-        self.logger.info("Настройка LoRA-адаптера...")
+        train_type = self.config.get("training", {}).get("train_type", "sft")
+
+        if train_type == "cpt":
+            lora_cfg = self.config.get("cpt", {})
+            r = lora_cfg.get("rank", 64)
+            lora_alpha = lora_cfg.get("lora_alpha", 128)
+        else:
+            lora_cfg = self.config.get("lora", {})
+            r = lora_cfg.get("r", 16)
+            lora_alpha = lora_cfg.get("lora_alpha", 32)
+
+        target_modules = lora_cfg.get("target_modules", ["q_proj", "v_proj", "k_proj", "o_proj"])
+        lora_dropout = lora_cfg.get("lora_dropout", 0.05)
+        bias = lora_cfg.get("bias", "none")
+
+        self.logger.info(f"Настройка LoRA-адаптера (train_type={train_type}): r={r}, alpha={lora_alpha}")
 
         peft_config = LoraConfig(
-            r=lora_cfg.get("r", 16),
-            lora_alpha=lora_cfg.get("lora_alpha", 32),
-            target_modules=lora_cfg.get("target_modules", ["q_proj", "v_proj", "k_proj", "o_proj"]),
-            lora_dropout=lora_cfg.get("lora_dropout", 0.05),
-            bias=lora_cfg.get("bias", "none"),
+            r=r,
+            lora_alpha=lora_alpha,
+            target_modules=target_modules,
+            lora_dropout=lora_dropout,
+            bias=bias,
             task_type="CAUSAL_LM",
         )
 
         self.model = get_peft_model(self.model, peft_config)
+        self._current_peft_config = peft_config
         self.model.print_trainable_parameters()
 
     def _load_dataset(self):
         dataset_cfg = self.config.get("dataset", {})
         train_file = dataset_cfg.get("train_file", "university_train.json")
         val_file = dataset_cfg.get("val_file")
-        format_type = self.config.get("training", {}).get("format_type", "default")
+        train_type = self.config.get("training", {}).get("train_type", "sft")
+        if train_type == "cpt":
+            format_type = "cpt"
+        else:
+            format_type = self.config.get("training", {}).get("format_type", "default")
 
         if val_file:
             self.logger.info(f"Загрузка датасета: train={train_file}, val={val_file}, format={format_type}")
@@ -116,21 +135,15 @@ class NPITrainer:
         return dataset
 
     def _build_trainer(self, dataset, dataset_type: str = "big", has_validation: bool = False):
-        training_args = build_training_args(self.config, dataset_type=dataset_type, do_eval=has_validation)
-        self.logger.info("Создание SFTTrainer...")
+        train_type = self.config.get("training", {}).get("train_type", "sft")
+        training_args = build_training_args(self.config, dataset_type=dataset_type, do_eval=has_validation, train_type=train_type)
+        self.logger.info(f"Создание SFTTrainer (train_type={train_type})...")
 
         self.trainer = SFTTrainer(
             model=self.model,
             train_dataset=dataset["train"],
             eval_dataset=dataset.get("validation") if has_validation else None,
-            peft_config=LoraConfig(
-                r=self.config.get("lora", {}).get("r", 16),
-                lora_alpha=self.config.get("lora", {}).get("lora_alpha", 32),
-                target_modules=self.config.get("lora", {}).get("target_modules", ["q_proj", "v_proj", "k_proj", "o_proj"]),
-                lora_dropout=self.config.get("lora", {}).get("lora_dropout", 0.05),
-                bias=self.config.get("lora", {}).get("bias", "none"),
-                task_type="CAUSAL_LM",
-            ),
+            peft_config=self._current_peft_config,
             args=training_args,
         )
 
@@ -143,6 +156,8 @@ class NPITrainer:
         dataset = self._load_dataset()
         has_validation = "validation" in dataset
         self._build_trainer(dataset, dataset_type=dataset_type, has_validation=has_validation)
+
+        self._current_peft_config = None
 
         self.logger.info("Запуск обучения...")
         self.trainer.train()

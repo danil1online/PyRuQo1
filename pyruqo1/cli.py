@@ -42,8 +42,9 @@ def cli():
 @click.option("--val-file", help="Файл валидационного датасета", default=None)
 @click.option("--output-dir", help="Директория для сохранения LoRA-адаптера", default=None)
 @click.option("--mode", "-M", "mode", type=click.Choice(["simple", "train_val"]), default="simple", help="Режим: simple — один train-файл (из конфига), train_val — два файла (указать --train-file и --val-file)")
+@click.option("--train-type", type=click.Choice(["sft", "cpt"]), default="sft", help="Тип обучения: sft — instruction fine-tuning, cpt — continual pre-training")
 @click.option("--system-report", is_flag=True, help="Показать отчёт о системе")
-def train(config_path, model_name, dataset_type, train_file, val_file, output_dir, mode, system_report):
+def train(config_path, model_name, dataset_type, train_file, val_file, output_dir, mode, system_report, train_type):
     """Запуск QLoRA-обучения."""
     if system_report:
         print_system_report()
@@ -68,6 +69,7 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
     if output_dir:
         config.setdefault("training", {})["output_dir"] = output_dir
 
+    config.setdefault("training", {})["train_type"] = train_type
     config.setdefault("dataset", {})["train_file"] = train_file
     if val_file:
         config["dataset"]["val_file"] = val_file
@@ -87,7 +89,7 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
 @cli.command()
 @click.option("--input", "-i", "input_path", required=True, help="Папка с PDF-файлами или сборник журналов")
 @click.option("--output", "-o", "output_file", default=None, help="Выходной JSON-файл датасета")
-@click.option("--mode", "-M", "mode", type=click.Choice(["simple", "math"]), default="simple", help="Режим текста: simple — гуманитарный, math — математический с LaTeX")
+@click.option("--mode", "-M", "mode", type=click.Choice(["simple", "math", "cpt", "base"]), default="simple", help="Режим текста: simple — гуманитарный, math — математический с LaTeX, cpt — сырой текст для continual pre-training, base — структура статьи (введение→prompt, методы+результаты→thoughts, выводы→output)")
 @click.option("--servers", "-s", "servers", multiple=True, callback=_parse_servers, help="URL серверов llama.cpp")
 @click.option("--chunk-size", default=3500, help="Размер чанка в символах")
 @click.option("--overlap", default=500, help="Перекрывание чанков в символах")
@@ -99,18 +101,34 @@ def train(config_path, model_name, dataset_type, train_file, val_file, output_di
     default='2048', 
     help='Целевой размер контекста обучаемой модели (влияет на лаконичность ответов)'
 )
+@click.option("--base-hum", is_flag=True, default=False, help="Base-режим: гуманитарный системный промпт (социолог-экономист)")
+@click.option("--base-math", is_flag=True, default=False, help="Base-режим: математический системный промпт (математика, физика, информатика)")
 # ДОБАВЛЕН context_size В АРГУМЕНТЫ ФУНКЦИИ НИЖЕ:
-def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable_ocr, recursive, context_size):
+def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable_ocr, recursive, context_size, base_hum, base_math):
     """Генерация датасета из PDF-файлов через API."""
     if not output_file:
-        output_file = "university_math_dataset.json" if mode == "math" else "university_thinking_dataset.json"
+        if mode == "math":
+            output_file = "university_math_dataset.json"
+        elif mode == "cpt":
+            output_file = "university_cpt_dataset.json"
+        elif mode == "base":
+            output_file = "university_base_dataset.json"
+        else:
+            output_file = "university_thinking_dataset.json"
 
     input_dir = Path(input_path)
 
-    if mode == "math":
+    if mode == "cpt":
+        from pyruqo1.dataset import CPTParser, CPTChunker
+        parser = CPTParser(chunk_size=chunk_size, overlap=overlap)
+        chunker = CPTChunker(chunk_size=chunk_size, overlap=overlap)
+    elif mode == "math":
         from pyruqo1.dataset import MathParser, MathChunker
         parser = MathParser(chunk_size=chunk_size, overlap=overlap)
         chunker = MathChunker(chunk_size=chunk_size, overlap=overlap)
+    elif mode == "base":
+        from pyruqo1.dataset import BaseParser
+        parser = BaseParser(chunk_size=chunk_size, overlap=overlap)
     else:
         from pyruqo1.dataset import PDFParser, TextChunker
         parser = PDFParser(chunk_size=chunk_size, overlap=overlap, enable_ocr=enable_ocr)
@@ -120,18 +138,89 @@ def generate(input_path, output_file, mode, servers, chunk_size, overlap, enable
         get_logger().error(f"Директория не найдена: {input_path}")
         return
 
-    texts = parser.parse_folder(str(input_dir), recursive=recursive)
+    if mode == "base":
+        _save_base_dataset(parser, input_dir, recursive, output_file, base_hum, base_math)
+    elif mode == "cpt":
+        texts = parser.parse_folder(str(input_dir), recursive=recursive)
 
-    all_chunks = []
-    for text in texts:
-        all_chunks.extend(chunker.chunk(text))
+        all_chunks = []
+        for text in texts:
+            all_chunks.extend(chunker.chunk(text))
 
-    get_logger().info(f"Сформировано {len(all_chunks)} чанков.")
+        get_logger().info(f"Сформировано {len(all_chunks)} чанков.")
 
-    # Теперь context_size корректно передается из Click
-    from pyruqo1.dataset import DatasetGenerator
-    generator = DatasetGenerator(servers=list(servers), context_size=int(context_size))
-    generator.generate_from_chunks(all_chunks, output_file, mode=mode)
+        _save_cpt_dataset(all_chunks, output_file)
+    else:
+        texts = parser.parse_folder(str(input_dir), recursive=recursive)
+
+        all_chunks = []
+        for text in texts:
+            all_chunks.extend(chunker.chunk(text))
+
+        get_logger().info(f"Сформировано {len(all_chunks)} чанков.")
+
+        from pyruqo1.dataset import DatasetGenerator
+        generator = DatasetGenerator(servers=list(servers), context_size=int(context_size))
+        generator.generate_from_chunks(all_chunks, output_file, mode=mode)
+
+
+def _save_base_dataset(parser, input_dir, recursive, output_file, base_hum, base_math):
+    """Генерация SFT-датасета из структуры статей (введение→prompt, методы+результаты→thoughts, выводы→output)."""
+    import json
+
+    if base_hum:
+        system_prompt = "Ты ученый социолог-экономист. Проанализируй задачу и реши ее."
+    elif base_math:
+        system_prompt = "Ты ученый в области математики, физики, техники и информатики. Проанализируй задачу и реши ее."
+    else:
+        system_prompt = "Ты ученый. Проанализируй задачу и реши ее."
+
+    sections_list = parser.parse_folder(str(input_dir), recursive=recursive)
+
+    dataset_rows = []
+    for sections in sections_list:
+        prompt_text = sections.get("introduction", "").strip()
+        conclusion_text = sections.get("conclusion", "").strip()
+
+        if not prompt_text or not conclusion_text:
+            continue
+
+        methods_paragraphs = sections.get("methods", [])
+        results_paragraphs = sections.get("results", [])
+
+        thought_parts = []
+        for paragraph in methods_paragraphs:
+            p = paragraph.strip()
+            if p:
+                thought_parts.append(f"<Thought>\n{p}\n</Thought>")
+        for paragraph in results_paragraphs:
+            p = paragraph.strip()
+            if p:
+                thought_parts.append(f"<Thought>\n{p}\n</Thought>")
+
+        response_text = "\n\n".join(thought_parts) + f"\n\n<output>\n{conclusion_text}\n</output>"
+
+        dataset_rows.append({
+            "system": system_prompt,
+            "prompt": prompt_text,
+            "response": response_text,
+        })
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(dataset_rows, f, ensure_ascii=False, indent=4)
+
+    get_logger().info(f"Base-датасет сохранён: {output_file} ({len(dataset_rows)} строк)")
+
+
+def _save_cpt_dataset(chunks: list, output_file: str) -> None:
+    """Сохранение CPT-датасета в JSONL с полем text."""
+    import json
+
+    cpt_data = [{"text": chunk} for chunk in chunks]
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(cpt_data, f, ensure_ascii=False, indent=4)
+
+    get_logger().info(f"CPT-датасет сохранён: {output_file} ({len(cpt_data)} строк)")
 
 @cli.command()
 @click.option("--input", "-i", "input_path", required=True, help="Путь к PDF-файлу или папке журналов")

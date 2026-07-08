@@ -42,9 +42,22 @@ def formatting_prompts_func_chatml(examples: dict) -> list:
     return output_texts
 
 
+def format_single_example_cpt(example: dict) -> dict:
+    return {"text": example["text"]}
+
+
+def formatting_prompts_func_cpt(examples: dict) -> list:
+    text = examples.get("text", [])
+    if isinstance(text, list):
+        return text
+    return [text]
+
+
 def format_dataset(dataset, remove_columns: list = None, format_type: str = "default") -> dict:
     if format_type == "chatml":
         format_fn = format_single_example_chatml
+    elif format_type == "cpt":
+        format_fn = format_single_example_cpt
     else:
         format_fn = format_single_example_default
 
