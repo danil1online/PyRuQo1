@@ -11,6 +11,43 @@
 
 Пользовательские оверрайды: создайте `configs/<model_name>.yaml` для переопределения параметров.
 
+## Основные функции CLI
+
+```
+pyruqo1 check      # Проверка системы
+pyruqo1 split      # Разрезание журналов на статьи
+pyruqo1 generate   # Генерация датасета из PDF
+pyruqo1 mixds      # Объединение датасетов
+pyruqo1 train      # QLoRA-обучение
+pyruqo1 merge      # Слияние LoRA-адаптера
+pyruqo1 test-gguf  # Тестирование GGUF-модели
+```
+
+## Структура
+
+```
+pyruqo1/                   # основная библиотека
+├── config/            # YAML-конфиги моделей
+├── utils/             # логгер, системные утилиты, swap
+├── dataset/           # парсинг, чанкинг, генерация датасета
+│   ├── parser.py      # PDFParser (простой текст)
+│   ├── math_parser.py # MathParser (LaTeX через marker)
+│   ├── cpt_parser.py  # CPTParser (сырой текст для CPT)
+│   ├── base_parser.py # BaseParser (структура статьи для SFT)
+│   ├── chunker.py     # TextChunker, MathChunker, CPTChunker
+│   ├── generator.py   # DatasetGenerator (SFT-генерация)
+│   └── splitter.py    # JournalSplitter
+├── training/          # QLoRA-обучение (SFT + CPT)
+├── merge/             # слияние LoRA
+├── gguf/              # тестирование GGUF-моделей
+└── cli.py             # CLI (click)
+
+examples_scripts/      # старые скрипты (сохранены для совместимости)
+configs/               # пользовательские YAML-оверрайды (опционально)
+logs_example/          # примеры процессов обучения
+tests/                 # базовые тесты
+```
+
 ## Быстрый старт
 
 ### 1. Установка зависимостей ОС
@@ -360,18 +397,6 @@ pyruqo1 train --model merged_step1 --train-file university_train.json
 
 Получаем уже SFT-адаптер в `./merged_o1_gigachat3_university` и если нужно повторяем шаги `merge` - `gguf` - `test`.
 
-## CLI
-
-```
-pyruqo1 check      # Проверка системы
-pyruqo1 split      # Разрезание журналов на статьи
-pyruqo1 generate   # Генерация датасета из PDF
-pyruqo1 mixds      # Объединение датасетов
-pyruqo1 train      # QLoRA-обучение
-pyruqo1 merge      # Слияние LoRA-адаптера
-pyruqo1 test-gguf  # Тестирование GGUF-модели
-```
-
 ## Python API
 
 ```python
@@ -472,31 +497,6 @@ merger.merge(manage_swap=True)
 swap_path = get_managed_swap_path()
 if swap_path:
     remove_swap_file(swap_path)
-```
-
-## Структура
-
-```
-pyruqo1/                   # основная библиотека
-├── config/            # YAML-конфиги моделей
-├── utils/             # логгер, системные утилиты, swap
-├── dataset/           # парсинг, чанкинг, генерация датасета
-│   ├── parser.py      # PDFParser (простой текст)
-│   ├── math_parser.py # MathParser (LaTeX через marker)
-│   ├── cpt_parser.py  # CPTParser (сырой текст для CPT)
-│   ├── base_parser.py # BaseParser (структура статьи для SFT)
-│   ├── chunker.py     # TextChunker, MathChunker, CPTChunker
-│   ├── generator.py   # DatasetGenerator (SFT-генерация)
-│   └── splitter.py    # JournalSplitter
-├── training/          # QLoRA-обучение (SFT + CPT)
-├── merge/             # слияние LoRA
-├── gguf/              # тестирование GGUF-моделей
-└── cli.py             # CLI (click)
-
-examples_scripts/      # старые скрипты (сохранены для совместимости)
-configs/               # пользовательские YAML-оверрайды (опционально)
-logs_example/          # примеры процессов обучения
-tests/                 # базовые тесты
 ```
 
 ## Зависимости
